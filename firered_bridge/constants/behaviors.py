@@ -6,7 +6,7 @@ from ..game_data import get_behavior_name
 from ..memory.symbols import sym_addr
 from .tiles import *  # re-exported tile ids for behavior mapping
 
-# Metatile behaviors / règles de classification
+# Metatile behaviors / classification rules
 # =============================================================================
 
 # NOTE: Keep FireRed grass detection aligned with metatile_behavior.c.

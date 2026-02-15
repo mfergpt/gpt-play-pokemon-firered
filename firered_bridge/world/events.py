@@ -119,10 +119,10 @@ def _get_map_connections_ptr(*, map_group: Optional[int] = None, map_num: Option
 
 def get_current_map_bg_events(*, map_group: Optional[int] = None, map_num: Optional[int] = None) -> List[Dict[str, Any]]:
     """
-    Lit les BG events (éléments interactifs visibles) de la map actuelle.
+    Reads BG events (visible interactive elements) from the current map.
     Notes:
-    - Les hidden items (BG_EVENT_HIDDEN_ITEM et valeurs 5/6 traitées comme hidden item par le moteur)
-      ne sont PAS retournés (anti-cheat).
+    - Hidden items (BG_EVENT_HIDDEN_ITEM and values 5/6 treated as hidden items by the engine)
+      are NOT returned (anti-cheat).
     """
     base_events = _get_map_events_base(map_group=map_group, map_num=map_num)
     if base_events == 0:

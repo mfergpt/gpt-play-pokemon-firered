@@ -576,7 +576,7 @@ def build_full_state() -> Dict[str, Any]:
                 "group": map_group,
                 "number": map_num,
             "name": map_name,
-            "minimap_legend": MINIMAP_LEGEND,  # dérivé de MINIMAP_TILES
+            "minimap_legend": MINIMAP_LEGEND,  # derived from MINIMAP_TILES
             "flashNeeded": bool(flash_needed),
             "flashActive": bool(flash_active),
             "visibility": visibility,

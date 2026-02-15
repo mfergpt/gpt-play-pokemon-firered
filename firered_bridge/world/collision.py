@@ -43,7 +43,7 @@ from ..constants.tiles import (
     minimap_code_for_tile,
 )
 
-# Algorithme collision/passabilité
+# Collision/passability algorithm
 # =============================================================================
 
 
@@ -53,15 +53,15 @@ def process_tiles_to_collision_map(
     behaviors: List[int],
     player_elev: int,
     player_surf: bool,
-    secondary_tileset: int = 0,  # conservé pour compat, mais plus utilisé (red carpet par behavior uniquement)
+    secondary_tileset: int = 0,  # kept for compatibility, but no longer used (red carpet handled by behavior only)
     *,
     include_map_data: bool = True,
 ) -> Dict[str, Any]:
     """
-    Traite les données de tiles pour générer une carte de passabilité.
+    Processes tile data to generate a passability map.
 
-    Utilise principalement les bits de collision du mapgrid (bits 10-11).
-    Les behaviors sont utilisés pour les ledges / waterfall / tags (grass/water/red carpet).
+    Primarily uses mapgrid collision bits (bits 10-11).
+    Behaviors are used for ledges / waterfall / tags (grass/water/red carpet).
     """
     if width <= 0:
         return {
@@ -79,7 +79,7 @@ def process_tiles_to_collision_map(
     height = (num_tiles + width - 1) // width
     total_cells = width * height
 
-    # 1er passage: collecte info brute (tableaux plats, pas de dict par tuile)
+    # 1st pass: collect raw info (flat arrays, no per-tile dict)
     present = [False] * total_cells
     collision_bits_arr = [0] * total_cells
     elev_arr = [0] * total_cells
@@ -96,7 +96,7 @@ def process_tiles_to_collision_map(
         elev = (val & MAPGRID_ELEVATION_MASK) >> 12
         metatile_id = val & MAPGRID_METATILE_ID_MASK
 
-        # Ponts => elev 15 = conserver elevation joueur
+        # Bridges => elev 15 = keep player elevation
         if elev == 15:
             elev = player_elev
 
@@ -108,7 +108,7 @@ def process_tiles_to_collision_map(
         if behaviors and metatile_id < len(behaviors):
             beh_id_arr[i] = behaviors[metatile_id]
 
-    # 2e passage: détermination passabilité
+    # 2nd pass: passability determination
     out_rows: List[List[str]] = []
     minimap_grid: List[List[int]] = []
 
@@ -129,20 +129,20 @@ def process_tiles_to_collision_map(
             coll = collision_bits_arr[i]
             elev = elev_arr[i]
 
-            # Priorité 1: Tile indéfini = bloqué
+            # Priority 1: Undefined tile = blocked
             if is_undef_arr[i]:
                 tile_type = TILE_BLOCKED
-            # Priorité 2: Behaviors spéciaux (ledges / waterfall)
-            # NOTE: Certaines tuiles spéciales (ex: ledges) ont un collision flag non-nul dans le mapgrid,
-            # ce qui est normal car on ne peut pas "se tenir" dessus. Leur sémantique vient du behavior.
+            # Priority 2: Special behaviors (ledges / waterfall)
+            # NOTE: Some special tiles (e.g. ledges) have a non-zero collision flag in the mapgrid,
+            # which is normal because you cannot "stand" on them. Their semantics come from the behavior.
             elif beh_id in LEDGE_BEHAVIOR_ID_TO_TILE:
                 tile_type = LEDGE_BEHAVIOR_ID_TO_TILE[beh_id]
             elif beh_id != -1 and beh_id == behavior_consts.WATERFALL_BEHAVIOR_ID:
                 tile_type = TILE_WATERFALL
-            # Priorité 3: Collision explicite (bits 10-11 != 0) = bloqué
+            # Priority 3: Explicit collision (bits 10-11 != 0) = blocked
             elif coll != 0:
                 tile_type = TILE_BLOCKED
-            # Priorité 5: Passabilité basée sur l'élévation
+            # Priority 5: Elevation-based passability
             elif is_transition_arr[i]:
                 tile_type = TILE_WALKABLE
             elif player_elev == 0:
@@ -176,11 +176,11 @@ def process_tiles_to_collision_map(
                 tile_type = TILE_BLOCKED if adj_same_elev else TILE_WALKABLE
 
             # Extra classification for special walkable tiles
-            # IMPORTANT: certains terrains sont mieux identifiés via behavior plutôt que via notre heuristique
-            # elevation/collision (ex: l'eau en bord de terre ne doit pas devenir "Wall").
-            # IMPORTANT: ne pas écraser une collision explicite par un tag de terrain.
-            # Certaines tuiles d'eau (ex: barrages invisibles en mer) ont un behavior "OCEAN_WATER"
-            # mais un collision flag non-nul : elles sont impassables en jeu et doivent rester "Wall".
+            # IMPORTANT: some terrain types are better identified via behavior than via our
+            # elevation/collision heuristics (e.g. shoreline water should not become "Wall").
+            # IMPORTANT: do not overwrite explicit collision with a terrain tag.
+            # Some water tiles (e.g. invisible sea barriers) have an "OCEAN_WATER" behavior
+            # but a non-zero collision flag: they are impassable in-game and must stay "Wall".
             if coll == 0 and beh_id in WATER_CURRENT_BEHAVIOR_ID_TO_TILE:
                 tile_type = WATER_CURRENT_BEHAVIOR_ID_TO_TILE[beh_id]
             elif coll == 0 and beh_id in DIVEABLE_WATER_BEHAVIOR_IDS:

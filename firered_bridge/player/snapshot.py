@@ -582,10 +582,10 @@ def get_player_badges() -> Dict[str, bool]:
 
 def get_current_map_group_num() -> Tuple[int, int]:
     """
-    Lit le map group et map number depuis gSaveBlock1Ptr->location.
-    Struct WarpData à l'offset 0x04 dans SaveBlock1:
-      - mapGroup (s8) à offset 0
-      - mapNum (s8) à offset 1
+    Reads map group and map number from gSaveBlock1Ptr->location.
+    WarpData struct at offset 0x04 in SaveBlock1:
+      - mapGroup (s8) at offset 0
+      - mapNum (s8) at offset 1
     """
     try:
         base = mgba.mgba_read32(SAVESTATE_OBJECT_POINTER_ADDR)

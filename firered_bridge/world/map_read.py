@@ -395,7 +395,7 @@ def get_main_metatile_behaviors() -> Optional[List[int]]:
 
 
 def get_backup_metatile_behaviors() -> Optional[List[int]]:
-    # Pour la backup, on réutilise les tilesets du main
+    # For backup, reuse the main tilesets
     return get_main_metatile_behaviors()
 
 

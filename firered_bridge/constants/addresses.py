@@ -831,7 +831,7 @@ STAT_SPATK = 4
 STAT_SPDEF = 5
 SPECIES_SHEDINJA = 303
 
-# Badges (FireRed): flags indices (bit offsets dans le blob flags)
+# Badges (FireRed): flag indices (bit offsets in the flags blob)
 #
 # NOTE: We keep both a stable ID (used by the server for logs/progress) and a human label.
 BADGES = [

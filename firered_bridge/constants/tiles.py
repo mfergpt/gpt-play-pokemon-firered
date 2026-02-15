@@ -8,7 +8,7 @@ from .addresses import MAP_OFFSET, MAPGRID_COLLISION_MASK, MAPGRID_UNDEFINED
 # Tiles / Minimap (SINGLE SOURCE OF TRUTH)
 # =============================================================================
 
-# Passabilité (emojis) — "tile ids" dans map_data
+# Passability (emojis) - "tile ids" in map_data
 TILE_WALKABLE = "🟫"
 TILE_WALKABLE_BLOCK_NORTH = "🟫↑🚫"
 TILE_WALKABLE_BLOCK_SOUTH = "🟫↓🚫"
@@ -82,12 +82,12 @@ OBJECT_EVENT_TILE_BY_TYPE: Dict[str, str] = {
 
 @dataclass(frozen=True, slots=True)
 class MinimapTileDef:
-    """Définition d'une tuile minimap + sa sémantique.
+    """Definition of a minimap tile + its semantics.
 
     IMPORTANT:
-    - Ce dict est LA source de vérité pour:
+    - This dict is THE source of truth for:
       - minimap_legend (code -> label)
-      - mapping tile->code
+      - tile->code mapping
       - collision flag (tile -> bool)
     """
 
@@ -99,7 +99,7 @@ class MinimapTileDef:
     show_in_legend: bool = True
 
 
-# Codes numériques (inchangés pour ne rien casser côté client)
+# Numeric codes (unchanged to avoid breaking the client side)
 MINIMAP_CODE_WALL = 0
 MINIMAP_CODE_FREE_GROUND = 1
 MINIMAP_CODE_FREE_GROUND_BLOCK_NORTH = 68
@@ -120,7 +120,7 @@ MINIMAP_CODE_LEDGE_SOUTH = 8
 MINIMAP_CODE_WARP = 9
 MINIMAP_CODE_NPC = 10
 MINIMAP_CODE_INTERACTIVE = 11
-# 12 (Hidden item) volontairement non exposé / non utilisé (anti-cheat)
+# 12 (Hidden item) intentionally not exposed / not used (anti-cheat)
 MINIMAP_CODE_PC = 14
 MINIMAP_CODE_REGION_MAP = 15
 MINIMAP_CODE_TELEVISION = 16
@@ -401,7 +401,7 @@ MINIMAP_TILES: Dict[int, MinimapTileDef] = {
         passability=False,
         is_base_terrain=True,
     ),
-    # Overlays (pas du terrain de base)
+    # Overlays (not base terrain)
     MINIMAP_CODE_WARP: MinimapTileDef(
         glyph=TILE_WARP,
         label="Warp Pad",
@@ -543,7 +543,7 @@ MINIMAP_TILES: Dict[int, MinimapTileDef] = {
     ),
 }
 
-# Derivés AUTOMATIQUEMENT (pas de duplication "source")
+# AUTOMATICALLY derived (no "source" duplication)
 MINIMAP_LEGEND: Dict[int, str] = {code: td.label for code, td in MINIMAP_TILES.items() if td.show_in_legend}
 MINIMAP_CODE_BY_TILE: Dict[str, int] = {td.tile_id: code for code, td in MINIMAP_TILES.items()}
 

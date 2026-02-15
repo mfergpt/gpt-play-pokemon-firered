@@ -9,7 +9,7 @@ from ..memory import mgba
 from ..util.bytes import _u16le_from, _u32le_from, _u8_from
 from .snapshot import get_security_key
 
-# Sac / inventaire (quantités XOR avec security key)
+# Bag / inventory (quantities XORed with security key)
 # =============================================================================
 
 # Debug flag - set BAG_DEBUG=1 env var to enable verbose bag parsing logs

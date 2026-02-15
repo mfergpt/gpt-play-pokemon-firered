@@ -1055,7 +1055,7 @@ async def lifespan(app: Any):
     _setup_bench_logging()
     ensure_game_data_loaded()
     yield
-    # Shutdown (rien à faire ici)
+    # Shutdown (nothing to do here)
 
 def request_data() -> Dict[str, Any]:
     try:

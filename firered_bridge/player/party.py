@@ -9,7 +9,7 @@ from ..text import encoding as text_encoding
 from ..util.bytes import _u8_from
 from .save import get_national_pokedex_num
 
-# Equipe Pokémon (décryptage PID/OTID, sous-structures, stats...)
+# Pokemon party (PID/OTID decryption, substructures, stats...)
 # =============================================================================
 
 _SPECIES_INFO_CACHE: Dict[int, Tuple[int, int, int, int]] = {}
