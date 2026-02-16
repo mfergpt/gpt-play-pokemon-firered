@@ -309,6 +309,52 @@ function formatBattleState(battleData) {
   return lines.join("\n") + "\n";
 }
 
+async function fetchLiveChat() {
+  const STREAMER_URL = "http://localhost:9886";
+  let twitchChat = [];
+  let mentions = [];
+  try {
+    const tRes = await fetch(`${STREAMER_URL}/api/twitch-chat`);
+    if (tRes.ok) twitchChat = await tRes.json();
+  } catch (_) {}
+  try {
+    const mRes = await fetch(`${STREAMER_URL}/api/mentions`);
+    if (mRes.ok) mentions = await mRes.json();
+  } catch (_) {}
+  return { twitchChat, mentions };
+}
+
+function formatLiveChat(twitchChat, mentions) {
+  const lines = ["<live_chat>"];
+
+  // Last 10 twitch messages
+  const recentChat = twitchChat.slice(-10);
+  if (recentChat.length > 0) {
+    lines.push("  <twitch_chat>");
+    for (const msg of recentChat) {
+      lines.push(`    <msg user="${escapeXml(msg.username)}">${escapeXml(msg.text)}</msg>`);
+    }
+    lines.push("  </twitch_chat>");
+  } else {
+    lines.push("  <twitch_chat>No messages yet</twitch_chat>");
+  }
+
+  // Last 5 twitter mentions
+  const recentMentions = mentions.slice(-5);
+  if (recentMentions.length > 0) {
+    lines.push("  <twitter_mentions>");
+    for (const m of recentMentions) {
+      lines.push(`    <mention user="${escapeXml(m.username || m.author_id || 'unknown')}">${escapeXml(m.text || '')}</mention>`);
+    }
+    lines.push("  </twitter_mentions>");
+  } else {
+    lines.push("  <twitter_mentions>No recent mentions</twitter_mentions>");
+  }
+
+  lines.push("</live_chat>");
+  return lines.join("\n") + "\n";
+}
+
 async function buildUserInputText(gameDataJson) {
   const { counters } = state;
 
@@ -336,6 +382,10 @@ async function buildUserInputText(gameDataJson) {
   if (!Number.isFinite(localCol) || localCol < 0 || localCol >= visibleW) {
     localCol = visibleW ? Math.floor(visibleW / 2) : 0;
   }
+
+  // Fetch live chat from streamer
+  const { twitchChat, mentions } = await fetchLiveChat();
+  const liveChatDisplay = formatLiveChat(twitchChat, mentions);
 
   let gameAreaDisplay = null;
   let minimapDisplay = null;
@@ -419,6 +469,7 @@ ${isInDialog ? "Not visible in dialogue" : gameAreaDisplay || "No visible area d
 ${isInDialog ? "Not visible in dialogue" : minimapDisplay || "No minimap data"}
 </explored_map>
 
+${liveChatDisplay}
 </game_state>
   `.trim();
 
