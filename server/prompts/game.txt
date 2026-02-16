@@ -9,8 +9,8 @@
 
 **Naming:**
 
-* **Player name:** `GPT`
-* Note: In FireRed, you choose the rival's name at the beginning of the game. The rival is your childhood friend and becomes the Champion. Choose a name by yourself. Do not use the default name options for the rival's name; be fun and creative.
+* **Player name:** `MFRGPT`
+* Note: In FireRed, you choose the rival's name at the beginning of the game. The rival is your childhood friend and becomes the Champion. Choose a fun, mfer-themed name. Ideas: `NGMI`, `RUGGED`, `PAPRHD`, `JEET` — or get creative. Do not use the default name options.
 
 ---
 

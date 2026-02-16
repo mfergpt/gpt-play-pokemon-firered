@@ -1,4 +1,4 @@
-require("dotenv").config();
+require("dotenv").config({ override: true });
 
 const express = require("express");
 const http = require("http");
@@ -123,7 +123,55 @@ async function start() {
       ok: true,
       wsPort,
       pythonBaseUrl: config.pythonServer.baseUrl,
+      model: config.openai.model,
     });
+  });
+
+  // Model switcher
+  app.get("/api/model", (req, res) => {
+    res.json({ model: config.openai.model, modelPathfinding: config.openai.modelPathFinding });
+  });
+
+  function persistModel(model) {
+    // Write model to .env so it survives restarts
+    const envPath = require("path").join(__dirname, ".env");
+    try {
+      let env = require("fs").readFileSync(envPath, "utf8");
+      env = env.replace(/^OPENAI_MODEL=.*/m, `OPENAI_MODEL=${model}`);
+      env = env.replace(/^OPENAI_MODEL_PATHFINDING=.*/m, `OPENAI_MODEL_PATHFINDING=${model}`);
+      require("fs").writeFileSync(envPath, env, "utf8");
+    } catch (e) {
+      console.error("[MODEL] Failed to persist to .env:", e.message);
+    }
+  }
+
+  app.post("/api/model", express.json(), (req, res) => {
+    const allowed = ["gpt-5.2", "gpt-5-mini", "gpt-5-nano"];
+    const newModel = req.body.model;
+    if (!allowed.includes(newModel)) {
+      return res.status(400).json({ error: `Invalid model. Allowed: ${allowed.join(", ")}` });
+    }
+    config.openai.model = newModel;
+    config.openai.modelPathFinding = newModel;
+    persistModel(newModel);
+    console.log(`[MODEL] Switched to: ${newModel}`);
+    res.json({ ok: true, model: newModel });
+  });
+
+  app.post("/api/restart", express.json(), (req, res) => {
+    const newModel = req.body.model;
+    if (newModel) {
+      const allowed = ["gpt-5.2", "gpt-5-mini", "gpt-5-nano"];
+      if (allowed.includes(newModel)) {
+        config.openai.model = newModel;
+        config.openai.modelPathFinding = newModel;
+        persistModel(newModel);
+      }
+    }
+    console.log(`[RESTART] Restarting agent with model: ${config.openai.model}`);
+    res.json({ ok: true, model: config.openai.model, restarting: true });
+    // Graceful restart: exit and let the wrapper respawn
+    setTimeout(() => process.exit(0), 500);
   });
 
   app.get("/getMinimap", async (req, res) => {

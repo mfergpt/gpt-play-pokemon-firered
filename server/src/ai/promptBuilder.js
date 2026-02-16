@@ -440,9 +440,51 @@ You can safely update them all at once.
 
 async function buildDeveloperPrompt() {
   const gamePrompt = await fs.readFile(path.join(config.promptsDir, "game.txt"), "utf8");
+
+  // Load mferGPT identity from workspace core files
+  const WORKSPACE = "/Users/mfergpt/.openclaw/workspace";
+  const identityFiles = [
+    { name: "SOUL", path: `${WORKSPACE}/SOUL.md` },
+    { name: "IDENTITY", path: `${WORKSPACE}/IDENTITY.md` },
+    { name: "USER (creator)", path: `${WORKSPACE}/USER.md` },
+    { name: "STREAMER CONTEXT", path: path.join(config.promptsDir, "mfergpt_context.txt") },
+    { name: "LONG-TERM MEMORY (mfer lore, community, key facts)", path: `${WORKSPACE}/MEMORY.md`, maxChars: 6000 },
+  ];
+
+  let identityContext = "";
+  for (const f of identityFiles) {
+    try {
+      let content = await fs.readFile(f.path, "utf8");
+      if (f.maxChars) content = content.slice(0, f.maxChars);
+      identityContext += `\n## ${f.name}\n\n${content}\n`;
+    } catch (_) {
+      // Skip missing files
+    }
+  }
+
+  // Load recent memory (today + yesterday)
+  try {
+    const now = new Date();
+    for (let offset = 0; offset <= 1; offset++) {
+      const d = new Date(now);
+      d.setDate(d.getDate() - offset);
+      const dateStr = d.toISOString().slice(0, 10);
+      const memPath = `${WORKSPACE}/memory/${dateStr}.md`;
+      try {
+        const mem = await fs.readFile(memPath, "utf8");
+        // Only include first 2000 chars to avoid bloating context
+        identityContext += `\n## RECENT MEMORY (${dateStr})\n\n${mem.slice(0, 2000)}\n`;
+      } catch (_) {}
+    }
+  } catch (_) {}
+
+  const fullPrompt = identityContext
+    ? `# mferGPT IDENTITY & CONTEXT\n${identityContext}\n\n---\n\n${gamePrompt}`
+    : gamePrompt;
+
   return {
     role: "developer",
-    content: [{ type: "input_text", text: gamePrompt }],
+    content: [{ type: "input_text", text: fullPrompt }],
   };
 }
 

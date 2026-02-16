@@ -1307,6 +1307,57 @@
       readSettingsFromInputs();
       renderRuntime();
     });
+
+    // Restart button
+    const restartBtn = document.getElementById("restart-btn");
+    if (restartBtn) {
+      restartBtn.addEventListener("click", () => {
+        const modelSelect = document.getElementById("model-select");
+        const model = modelSelect ? modelSelect.value : undefined;
+        if (!confirm(`Restart agent with model: ${model}?`)) return;
+        restartBtn.textContent = "⟳ Restarting...";
+        restartBtn.disabled = true;
+        fetch(`http://${state.settings.host}:${state.settings.port}/api/restart`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ model }),
+        })
+          .then(() => {
+            setTimeout(() => {
+              restartBtn.textContent = "⟳ Restart Agent";
+              restartBtn.disabled = false;
+            }, 5000);
+          })
+          .catch(() => {
+            restartBtn.textContent = "⟳ Restart Agent";
+            restartBtn.disabled = false;
+          });
+      });
+    }
+
+    // Model switcher
+    const modelSelect = document.getElementById("model-select");
+    if (modelSelect) {
+      // Fetch current model on load
+      fetch(`http://${state.settings.host}:${state.settings.port}/api/model`)
+        .then(r => r.json())
+        .then(d => { if (d.model) modelSelect.value = d.model; })
+        .catch(() => {});
+
+      modelSelect.addEventListener("change", () => {
+        const newModel = modelSelect.value;
+        fetch(`http://${state.settings.host}:${state.settings.port}/api/model`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ model: newModel }),
+        })
+          .then(r => r.json())
+          .then(d => {
+            if (d.ok) console.log(`Model switched to: ${d.model}`);
+          })
+          .catch(e => console.error("Model switch failed:", e));
+      });
+    }
   }
 
   function bootstrap() {

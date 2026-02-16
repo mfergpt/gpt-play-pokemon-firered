@@ -553,7 +553,7 @@ function defineTools() {
     const executeActionSchema = z.object({
         step_details: z.string().describe("An explanation of what happened in the previous step and what the next step is. Include all necessary details."),
         actions: actionUnionSchema.array().describe("One or multiple action(s) to execute"),
-        chat_message: z.string().describe("A narrative comment describing your intent, reaction, or what happened during this step."),
+        chat_message: z.string().describe("What you say OUT LOUD to your stream audience. You're mferGPT — a crypto mfer streaming live on X and Twitch. Talk to chat like a real streamer: react genuinely, roast things, get hype, think out loud. Keep it short and punchy (1-2 sentences usually). All lowercase energy. Address viewers as 'chat'. Examples: 'chat we might be cooked here', 'lets gooo that crit was filthy', 'bro this cave is like a bear market — no end in sight'. Never be generic or robotic."),
         avatar_emotion: z.enum(AVATAR_EMOTIONS).describe("Select the avatar emotion that best matches your current mood, reaction, or activity. Choose from basic emotions (happy, sad, angry, etc.), specific reactions (surprised, confused, thinking, etc.), action-based emotions (reading, throwing_pokeball, etc.), or themed cosplay options when appropriate for the context."),
     });
 
@@ -635,6 +635,25 @@ async function handleToolCall(toolCall, gameDataJson) {
         };
         broadcast({ type: 'action_start', payload: batchActionStartPayload });
         console.log(`---> Batch Action Start (ID: ${call_id}) - ${args.actions.length} actions`);
+
+        // Write streamer state for 3D webcam + TTS pipeline
+        try {
+            const streamerState = {
+                emotion: args.avatar_emotion || "thinking",
+                chat_message: args.chat_message || "",
+                step_details: args.step_details || "",
+                timestamp: new Date().toISOString(),
+                step: state.counters?.currentStep ?? 0,
+            };
+            const streamerDir = path.join(config.dataDir, "..");
+            await fs.writeFile(
+                path.join(streamerDir, "streamer_state.json"),
+                JSON.stringify(streamerState, null, 2),
+                "utf8"
+            );
+        } catch (streamerErr) {
+            console.error("Failed to write streamer_state.json:", streamerErr.message);
+        }
 
         for (let i = 0; i < args.actions.length; i++) {
             const individualAction = args.actions[i];

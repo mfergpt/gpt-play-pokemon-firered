@@ -10,13 +10,26 @@ const config = {
   openai: {
     apiKey: process.env.OPENAI_API_KEY,
     model: process.env.OPENAI_MODEL || "gpt-5.2",
-    reasoningEffort: process.env.OPENAI_REASONING_EFFORT || "high",
-    reasoningEffortBattle: process.env.OPENAI_REASONING_EFFORT_BATTLE || "high",
-    reasoningEffortDialog: process.env.OPENAI_REASONING_EFFORT_DIALOG || "high",
-    reasoningEffortCriticism: process.env.OPENAI_REASONING_EFFORT_CRITICISM || "high",
-    reasoningEffortSummary: process.env.OPENAI_REASONING_EFFORT_SUMMARY || "xhigh",
+
+    // Reasoning efforts — dynamic getters that return xhigh for gpt-5.2, high otherwise
+    get reasoningEffort() { return this._effortFor(process.env.OPENAI_REASONING_EFFORT, "high"); },
+    get reasoningEffortBattle() { return this._effortFor(process.env.OPENAI_REASONING_EFFORT_BATTLE, "high"); },
+    get reasoningEffortDialog() { return this._effortFor(process.env.OPENAI_REASONING_EFFORT_DIALOG, "high"); },
+    get reasoningEffortCriticism() { return this._effortFor(process.env.OPENAI_REASONING_EFFORT_CRITICISM, "high"); },
+    get reasoningEffortSummary() { return this._effortFor(process.env.OPENAI_REASONING_EFFORT_SUMMARY, "xhigh"); },
+    get reasoningEffortPathfinding() { return this._effortFor(process.env.OPENAI_REASONING_EFFORT_PATHFINDING, "high"); },
+    _effortFor(envVal, fullModelDefault) {
+      const XHIGH_MODELS = ["gpt-5.2", "gpt-5.1", "gpt-5"];
+      const supportsXhigh = XHIGH_MODELS.includes(this.model);
+      if (envVal) {
+        // If env explicitly set xhigh but model doesn't support it, downgrade
+        return (envVal === "xhigh" && !supportsXhigh) ? "high" : envVal;
+      }
+      // Default: use xhigh for full models, high for others
+      return (fullModelDefault === "xhigh" && !supportsXhigh) ? "high" : fullModelDefault;
+    },
+
     modelPathFinding: process.env.OPENAI_MODEL_PATHFINDING || "gpt-5.2",
-    reasoningEffortPathfinding: process.env.OPENAI_REASONING_EFFORT_PATHFINDING || "high",
     reasoningSummary: process.env.OPENAI_REASONING_SUMMARY || "auto",
 
     tokenLimit: Number(process.env.OPENAI_TOKEN_LIMIT || 250000),

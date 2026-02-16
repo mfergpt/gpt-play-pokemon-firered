@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>mferGPT Streamer Cam</title>
+<style>
+  * { margin: 0; padding: 0; }
+  body { background: #ffb670; overflow: hidden; }
+  canvas { display: block; }
+  #speech-bubble {
+    position: absolute;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(0,0,0,0.85);
+    color: #00ff88;
+    font-family: 'Courier New', monospace;
+    font-size: 16px;
+    padding: 12px 20px;
+    border-radius: 12px;
+    max-width: 500px;
+    text-align: center;
+    opacity: 0;
+    transition: opacity 0.3s;
+    border: 1px solid #00ff8855;
+    pointer-events: none;
+  }
+  #speech-bubble.visible { opacity: 1; }
+  #audio-enable {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: rgba(0,0,0,0.9);
+    color: #00ff88;
+    font-family: 'Courier New', monospace;
+    font-size: 24px;
+    padding: 20px 40px;
+    border-radius: 12px;
+    border: 2px solid #00ff88;
+    cursor: pointer;
+    z-index: 100;
+  }
+  #audio-enable:hover { background: #00ff8822; }
+  #audio-enable.hidden { display: none; }
+</style>
+</head>
+<body>
+<div id="audio-enable">🔊 click to enable audio</div>
+<div id="speech-bubble"></div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.162.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.162.0/examples/jsm/"
+  }
+}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
+
+// Config
+const ANIMATION_DIR = '/animations/';
+const MODEL_PATH = '/models/mfergpt.glb';
+const STATE_URL = '/api/streamer-state';
+const POLL_INTERVAL = 2000;
+
+// Emotion → animation mapping
+const EMOTION_ANIMS = {
+  // Positive
+  happy: 'Happy_Walking_Forward',
+  excited: 'Celebrating_After_A_Win',
+  proud: 'High_Enthusiasm_Fist_Pump',
+  relieved: 'Standing_Idle',
+  loving: 'Happy_Walking_Forward',
+  playful: 'Laughing_While_Standing',
+  confident: 'Standing_Idle',
+  smug: 'Standing_Idle',
+  mischievous: 'Laughing_While_Standing',
+  
+  // Negative
+  sad: 'Covering_Face_In_Shame_After_Defeat',
+  angry: 'Being_Terrified_While_Standing',
+  disappointed: 'Covering_Face_In_Shame_After_Defeat',
+  frustrated: 'Being_Terrified_While_Standing',
+  hurt: 'Covering_Face_In_Shame_After_Defeat',
+  scared: 'Being_Terrified_While_Standing',
+  nervous: 'Being_Terrified_While_Standing',
+  embarrassed: 'Covering_Face_In_Shame_After_Defeat',
+  guilty: 'Covering_Face_In_Shame_After_Defeat',
+  annoyed: 'Shrugging_Shoulders',
+  disgusted: 'Shrugging_Shoulders',
+  sick: 'Covering_Face_In_Shame_After_Defeat',
+  
+  // Neutral / Mental
+  thinking: 'General_Conversation',
+  curious: 'General_Conversation',
+  confused: 'Shrugging_Shoulders',
+  surprised: 'Being_Terrified_While_Standing',
+  shocked: 'Being_Terrified_While_Standing',
+  bored: 'Standing_Idle',
+  sleepy: 'Standing_Idle',
+  tired: 'Standing_Idle',
+  nostalgic: 'Standing_Idle',
+  overwhelmed: 'Being_Terrified_While_Standing',
+  suspicious: 'General_Conversation',
+  fierce: 'High_Enthusiasm_Fist_Pump',
+  kawai: 'Happy_Walking_Forward',
+  
+  // Action
+  reading: 'Sitting_At_A_Computer_And_Typing',
+  reading_minimap: 'Sitting_At_A_Computer_And_Typing',
+  throwing_pokeball: 'High_Enthusiasm_Fist_Pump',
+  
+  // Default
+  default: 'Sitting_At_A_Computer_And_Typing',
+};
+
+// Scene setup
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(35, window.innerWidth / window.innerHeight, 0.1, 100);
+// Streamer-style framing: upper body, slightly off-center
+camera.position.set(0.3, 1.3, 1.8);
+camera.lookAt(0, 1.0, 0);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setPixelRatio(window.devicePixelRatio);
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+document.body.appendChild(renderer.domElement);
+
+// Lighting
+const ambient = new THREE.AmbientLight(0xffffff, 0.6);
+scene.add(ambient);
+const dirLight = new THREE.DirectionalLight(0xffffff, 1.2);
+dirLight.position.set(2, 3, 2);
+scene.add(dirLight);
+const rimLight = new THREE.DirectionalLight(0x00ff88, 0.3);
+rimLight.position.set(-2, 1, -1);
+scene.add(rimLight);
+
+// Animation state
+let mixer = null;
+let currentAction = null;
+let currentAnimName = '';
+const animCache = {};
+const fbxLoader = new FBXLoader();
+const clock = new THREE.Clock();
+const bubble = document.getElementById('speech-bubble');
+let bubbleTimeout = null;
+let model = null;
+
+// Load model
+const gltfLoader = new GLTFLoader();
+gltfLoader.load(MODEL_PATH, (gltf) => {
+  model = gltf.scene;
+  model.scale.set(1, 1, 1);
+  model.rotation.y = Math.PI * 0.35; // turned to face our right
+  scene.add(model);
+  mixer = new THREE.AnimationMixer(model);
+  
+  // Start with sitting/typing
+  loadAndPlayAnim('Sitting_At_A_Computer_And_Typing');
+});
+
+async function loadAndPlayAnim(animName) {
+  if (!mixer || !model) return;
+  if (animName === currentAnimName) return;
+  
+  let clip = animCache[animName];
+  if (!clip) {
+    try {
+      const fbx = await new Promise((resolve, reject) => {
+        fbxLoader.load(`${ANIMATION_DIR}${animName}.fbx`, resolve, undefined, reject);
+      });
+      if (fbx.animations.length > 0) {
+        clip = fbx.animations[0];
+        clip.name = animName;
+        animCache[animName] = clip;
+      }
+    } catch (e) {
+      console.warn(`Failed to load animation: ${animName}`, e);
+      return;
+    }
+  }
+  
+  if (!clip) return;
+  
+  const newAction = mixer.clipAction(clip);
+  newAction.setLoop(THREE.LoopRepeat);
+  
+  if (currentAction) {
+    newAction.reset().fadeIn(0.5).play();
+    currentAction.fadeOut(0.5);
+  } else {
+    newAction.play();
+  }
+  
+  currentAction = newAction;
+  currentAnimName = animName;
+}
+
+function showBubble(text) {
+  if (!text) return;
+  // Truncate for display
+  const display = text.length > 120 ? text.substring(0, 117) + '...' : text;
+  bubble.textContent = display;
+  bubble.classList.add('visible');
+  
+  if (bubbleTimeout) clearTimeout(bubbleTimeout);
+  bubbleTimeout = setTimeout(() => {
+    bubble.classList.remove('visible');
+  }, 8000);
+}
+
+// Audio playback
+const audioEl = new Audio();
+audioEl.volume = 1.0;
+// Boost: we'll use gain node for extra volume
+let gainNode = null;
+let audioCtx = null;
+let lastAudioFile = null;
+let audioEnabled = false;
+
+const enableBtn = document.getElementById('audio-enable');
+
+// Auto-enable audio (for OBS browser source which allows autoplay)
+function initAudio() {
+  audioEnabled = true;
+  enableBtn.classList.add('hidden');
+  audioCtx = new AudioContext();
+  const source = audioCtx.createMediaElementSource(audioEl);
+  gainNode = audioCtx.createGain();
+  gainNode.gain.value = 3.0;
+  source.connect(gainNode);
+  gainNode.connect(audioCtx.destination);
+  console.log('Audio auto-enabled');
+}
+
+// Try auto-init immediately (works in OBS browser source)
+try { initAudio(); } catch(e) { console.log('Auto-init failed, waiting for click'); }
+
+// Fallback: manual click for regular browsers
+enableBtn.addEventListener('click', () => {
+  if (!audioEnabled) initAudio();
+});
+
+// Poll streamer state
+let lastStep = -1;
+async function pollState() {
+  try {
+    const res = await fetch(STATE_URL);
+    if (!res.ok) return;
+    const data = await res.json();
+    
+    if (data.step !== lastStep) {
+      lastStep = data.step;
+      
+      // Update animation based on emotion
+      const emotion = data.emotion || 'default';
+      const animName = EMOTION_ANIMS[emotion] || EMOTION_ANIMS.default;
+      loadAndPlayAnim(animName);
+      
+      // Show chat message
+      if (data.chat_message) {
+        showBubble(data.chat_message);
+      }
+    }
+    
+    // Play TTS audio if new
+    if (audioEnabled && data.current_audio && data.current_audio !== lastAudioFile) {
+      lastAudioFile = data.current_audio;
+      audioEl.src = `/tts/${data.current_audio}`;
+      audioEl.play().catch(() => {});
+    }
+  } catch (e) {
+    // Silent fail
+  }
+}
+
+setInterval(pollState, POLL_INTERVAL);
+
+// Render loop
+function animate() {
+  requestAnimationFrame(animate);
+  const delta = clock.getDelta();
+  if (mixer) mixer.update(delta);
+  renderer.render(scene, camera);
+}
+animate();
+
+// Handle resize
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+</script>
+</body>
+</html>

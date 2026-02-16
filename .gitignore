@@ -8,3 +8,11 @@ server/.env
 .env
 server/backup
 backup_saves
+.venv/
+*.gba
+*.sav
+*.ss1
+streamer/node_modules
+streamer/.stream-keys
+streamer/tts_output/
+server/tmp/

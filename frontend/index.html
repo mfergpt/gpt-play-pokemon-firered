@@ -40,10 +40,19 @@
           <input id="reconnect-input" type="checkbox" checked />
           <span class="label-text">Auto reconnect</span>
         </label>
+        <label>
+          <span class="label-text">Model</span>
+          <select id="model-select" style="padding:4px 8px;border-radius:6px;background:#1e1e2e;color:#cdd6f4;border:1px solid #45475a;font-size:13px;">
+            <option value="gpt-5.2">gpt-5.2</option>
+            <option value="gpt-5-mini">gpt-5-mini</option>
+            <option value="gpt-5-nano">gpt-5-nano</option>
+          </select>
+        </label>
         <div class="btn-group">
           <button id="connect-btn" class="btn btn-primary">Connect</button>
           <button id="disconnect-btn" class="btn btn-secondary">Disconnect</button>
           <button id="clear-logs-btn" class="btn btn-secondary">Clear logs</button>
+          <button id="restart-btn" class="btn btn-secondary" style="background:#f38ba8;color:#1e1e2e;font-weight:600;">⟳ Restart Agent</button>
         </div>
       </div>
     </header>
