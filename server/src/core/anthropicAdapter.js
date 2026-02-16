@@ -82,19 +82,34 @@ function convertMessages(input) {
             ? msg.content.map((b) => {
                 if (b.type === "input_text" || b.type === "text") return { type: "text", text: b.text };
                 if (b.type === "input_image" || b.type === "image") {
+                  // Extract base64 data from various formats
+                  let imageData = b.data || "";
+                  let mediaType = b.media_type || "image/png";
+                  const imageUrl = typeof b.image_url === "string" ? b.image_url : b.image_url?.url || "";
+                  if (!imageData && imageUrl) {
+                    // Parse data URI: data:image/png;base64,AAAA...
+                    const match = imageUrl.match(/^data:([^;]+);base64,(.+)$/);
+                    if (match) {
+                      mediaType = match[1];
+                      imageData = match[2];
+                    } else {
+                      imageData = imageUrl; // Assume raw base64
+                    }
+                  }
+                  if (!imageData) return null; // Skip empty images
                   return {
                     type: "image",
                     source: {
                       type: "base64",
-                      media_type: b.media_type || "image/png",
-                      data: b.data || b.image_url?.url || "",
+                      media_type: mediaType,
+                      data: imageData,
                     },
                   };
                 }
                 return { type: "text", text: JSON.stringify(b) };
-              })
+              }).filter(Boolean)
             : [{ type: "text", text: String(msg.content) }];
-      messages.push({ role: "user", content });
+      if (content.length > 0) messages.push({ role: "user", content });
       continue;
     }
 
@@ -211,9 +226,10 @@ async function* anthropicResponsesCreate(options) {
     if (toolChoice) params.tool_choice = toolChoice;
   }
 
-  // Add thinking if model supports it
+  // Add thinking if model supports it (but NOT when tool_choice forces tool use)
   const reasoningEffort = options.reasoning?.effort;
-  if (reasoningEffort && model.includes("sonnet") || model.includes("opus")) {
+  const forcedToolUse = toolChoice && (toolChoice.type === "any" || toolChoice.type === "tool");
+  if (reasoningEffort && !forcedToolUse && (model.includes("sonnet") || model.includes("opus"))) {
     params.thinking = {
       type: "enabled",
       budget_tokens: getThinkingBudget(reasoningEffort),
