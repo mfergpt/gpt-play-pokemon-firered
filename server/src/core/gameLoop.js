@@ -12,6 +12,15 @@ const { processHistoryForAPI } = require('../ai/historyProcessor');
 const { defineTools, handleToolCall } = require('../ai/tools');
 const { updateProgressSteps, updateLastVisitedMaps } = require('./progressTracker');
 const { openai } = require('./openaiClient');
+const { anthropicResponsesCreate } = require('./anthropicAdapter');
+
+// Route API calls to OpenAI or Anthropic based on config
+function createStream(options) {
+    if (config.useAnthropic) {
+        return anthropicResponsesCreate(options);
+    }
+    return openai.responses.create({ ...options, stream: true });
+}
 const { startLoop, recordLoopUsage, flush, getCumulativeTotals } = require('../utils/tokenUsageTracker');
 const {
     startLoop: startTimeLoop,
@@ -320,7 +329,7 @@ async function gameLoop() {
                 // console.log("API Input (history size):", apiInput.length); // Debug
 
 	                const summaryStart = Date.now();
-	                const stream = await openai.responses.create({
+	                const stream = await createStream({
 	                    model: config.openai.model,
 	                    service_tier: config.openai.service_tierSummary,
 	                    input: apiInput,
@@ -330,10 +339,7 @@ async function gameLoop() {
 	                        summary: config.openai.reasoningSummary,
                     },
                     max_output_tokens: 32000,
-                    store: true, // Important to get call details in the final response
-
-                    // store: false, // Important to get call details in the final response,
-                    // include: ["reasoning.encrypted_content"],
+                    store: true,
                     stream: true,
                 });
 
@@ -478,7 +484,7 @@ async function gameLoop() {
                                 .join("\n\n");
 
                         const rollupStart = Date.now();
-                        const rollupStream = await openai.responses.create({
+                        const rollupStream = await createStream({
                             model: config.openai.model,
                             service_tier: config.openai.service_tierSummary,
                             input: [
@@ -791,7 +797,7 @@ async function gameLoop() {
                 // console.log("API Input (history size):", apiInput.length); // Debug
 
 	                const criticismStart = Date.now();
-	                const stream = await openai.responses.create({
+	                const stream = await createStream({
 	                    model: config.openai.model,
 	                    service_tier: config.openai.service_tierSelfCriticism,
 	                    input: apiInputCriticism,
@@ -801,9 +807,7 @@ async function gameLoop() {
 	                        summary: config.openai.reasoningSummary,
                     },
                     max_output_tokens: 32000,
-                    store: true, // Important to get call details in the final response
-                    // store: false, // Important to get call details in the final response,
-                    // include: ["reasoning.encrypted_content"],
+                    store: true,
                     stream: true,
                 });
 
@@ -929,7 +933,7 @@ async function gameLoop() {
             }
             console.log("reasoningEffort:", reasoningEffort);
             const mainCallStart = Date.now();
-            const stream = await openai.responses.create({
+            const stream = await createStream({
                 model: config.openai.model,
                 service_tier: config.openai.service_tier,
                 input: apiInput,
@@ -942,9 +946,7 @@ async function gameLoop() {
                 tool_choice: "required",
                 parallel_tool_calls: false,
                 max_output_tokens: 32000,
-                store: true, // Important to get call details in the final response,
-                // store: false, // Important to get call details in the final response,
-                // include: ["reasoning.encrypted_content"],
+                store: true,
                 stream: true,
             });
 

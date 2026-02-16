@@ -12,6 +12,7 @@ const { broadcast } = require('../core/socketHub');
 const { sendCommandsToPythonServer, requestConsoleRestart, fetchGameData } = require('../services/pythonService');
 const { minimapToMarkdown, formatTilesLegend } = require('../formatters/markdownFormatter');
 const { openai } = require('../core/openaiClient');
+const { findPathLocal } = require('./localPathfinding');
 const { recordPathfindingUsage } = require('../utils/tokenUsageTracker');
 const { recordReasoning: recordReasoningTime, recordToolBatch } = require('../utils/timeTracker');
 
@@ -1069,6 +1070,12 @@ async function handleToolCall(toolCall, gameDataJson) {
 }
 
 async function findPath(x, y, map_id, explanation) {
+    // Use local pathfinding when Anthropic mode is enabled (no Code Interpreter available)
+    if (config.useAnthropic) {
+        console.log("[findPath] Using local pathfinding (Anthropic mode)");
+        return findPathLocal(x, y, map_id, explanation);
+    }
+
     const gameDataJson = await fetchGameData();
     const pathfindingStart = Date.now();
     const { current_trainer_data } = gameDataJson;

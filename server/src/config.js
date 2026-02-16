@@ -6,6 +6,10 @@ const ROOT_DIR = path.join(__dirname, "..");
 const config = {
   wsPort: Number(process.env.WS_PORT || 9885),
 
+  // --- Provider Selection ---
+  // Set USE_ANTHROPIC=1 to use Anthropic via setup-token instead of OpenAI
+  useAnthropic: process.env.USE_ANTHROPIC === "1" || process.env.USE_ANTHROPIC === "true",
+
   // --- OpenAI Configuration ---
   openai: {
     apiKey: process.env.OPENAI_API_KEY,
