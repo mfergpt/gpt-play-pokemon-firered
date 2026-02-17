@@ -21,21 +21,7 @@
     position: relative;
   }
 
-  /* Animated scanline overlay */
-  body::after {
-    content: '';
-    position: absolute;
-    top: 0; left: 0; right: 0; bottom: 0;
-    background: repeating-linear-gradient(
-      0deg,
-      transparent,
-      transparent 2px,
-      rgba(0,0,0,0.03) 2px,
-      rgba(0,0,0,0.03) 4px
-    );
-    pointer-events: none;
-    z-index: 100;
-  }
+  /* CRT scanline overlay — disabled */
 
   @keyframes pulseGlow {
     0%, 100% { box-shadow: 0 0 8px #ffb67033; }
@@ -630,9 +616,10 @@ async function pollMentions() {
     const res = await fetch(`http://${WS_HOST}:9886/api/mentions`);
     if (!res.ok) return;
     const mentions = await res.json();
-    mentionsFeed.innerHTML = mentions.map(m =>
+    mentionsFeed.innerHTML = mentions.reverse().map(m =>
       `<div class="feed-entry"><span class="username">@${m.username}</span> <span class="text">${m.text}</span></div>`
     ).join('');
+    mentionsFeed.scrollTop = mentionsFeed.scrollHeight;
   } catch(e) {}
 }
 setInterval(pollMentions, 15000);

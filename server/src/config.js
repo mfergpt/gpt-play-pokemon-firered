@@ -143,7 +143,7 @@ const config = {
     keepLastNUserMessagesWithDetailedData: 4,
     keepLastNUserMessagesWithPokedex: 1,
     limitAssistantMessagesForSelfCriticism: 55,
-    limitAssistantMessagesForSummary: 120,
+    limitAssistantMessagesForSummary: 60,
   },
 
   // --- Tool Configuration ---

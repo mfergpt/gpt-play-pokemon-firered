@@ -211,7 +211,35 @@ async function* anthropicResponsesCreate(options) {
   const toolChoice = convertToolChoice(options.tool_choice);
 
   // Ensure messages alternate user/assistant properly
-  const cleanedMessages = ensureAlternating(messages);
+  let cleanedMessages = ensureAlternating(messages);
+
+  // Anthropic has a 200k token limit. Rough estimate: 4 chars per token.
+  // If estimated tokens exceed 180k, trim oldest messages (keep first + last N).
+  const estimateTokens = (msgs) => {
+    let chars = (system || '').length;
+    for (const m of msgs) {
+      if (typeof m.content === 'string') chars += m.content.length;
+      else if (Array.isArray(m.content)) {
+        for (const block of m.content) {
+          if (block.text) chars += block.text.length;
+          else if (block.content) chars += block.content.length;
+          else if (block.input) chars += JSON.stringify(block.input).length;
+        }
+      }
+    }
+    return Math.ceil(chars / 4);
+  };
+
+  let estimated = estimateTokens(cleanedMessages);
+  const TOKEN_LIMIT = 180000;
+  while (estimated > TOKEN_LIMIT && cleanedMessages.length > 10) {
+    // Remove from the front (oldest), but keep the very first message for context
+    cleanedMessages.splice(1, 2); // Remove pairs to maintain alternation
+    estimated = estimateTokens(cleanedMessages);
+  }
+  if (estimated > TOKEN_LIMIT) {
+    console.warn(`[Anthropic] Warning: estimated ${estimated} tokens still exceeds limit after trimming`);
+  }
 
   const params = {
     model,

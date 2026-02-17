@@ -90,7 +90,7 @@ async function processTTS(text, step) {
       model: 'gpt-4o-mini-tts',
       input: text,
       voice: 'ash',
-      instructions: 'Speak like a laid-back gamer streaming. Casual, energetic when excited, chill otherwise. Slightly fast pace.',
+      instructions: 'You are mferGPT, a crypto degen AI agent streaming Pokemon. Speak like a laid-back gamer and crypto mfer. Casual, energetic when excited, chill otherwise. Slightly fast pace. Call the chat viewers "mfers" (pronounced "em effers"). Call pokemon, items, and cool stuff in the game "mfers" too — like "this mfer just hit us with a crit" or "let\'s catch this mfer". The word "mfer" or "mfers" should be pronounced "em effer" or "em effers". You\'re from the mfers NFT community — stick figure headphones energy. Irreverent, funny, real.',
       response_format: 'mp3',
     });
     
@@ -194,13 +194,19 @@ const server = http.createServer((req, res) => {
     // API: recent twitter mentions
   if (pathname === '/api/mentions') {
     try {
-      const mentionsDir = '/Users/mfergpt/.openclaw/workspace/data/x-stream-processed';
-      const files = fs.readdirSync(mentionsDir)
-        .filter(f => f.endsWith('.json'))
-        .sort().reverse().slice(0, 10);
-      const mentions = files.map(f => {
+      const inboxDir = '/Users/mfergpt/.openclaw/workspace/data/x-stream-inbox';
+      const processedDir = '/Users/mfergpt/.openclaw/workspace/data/x-stream-processed';
+      const readDir = (dir) => {
         try {
-          const d = JSON.parse(fs.readFileSync(path.join(mentionsDir, f), 'utf8'));
+          return fs.readdirSync(dir).filter(f => f.endsWith('.json')).map(f => ({ file: f, dir }));
+        } catch { return []; }
+      };
+      const allFiles = [...readDir(inboxDir), ...readDir(processedDir)]
+        .sort((a, b) => b.file.localeCompare(a.file))
+        .slice(0, 10);
+      const mentions = allFiles.map(({ file, dir }) => {
+        try {
+          const d = JSON.parse(fs.readFileSync(path.join(dir, file), 'utf8'));
           return {
             username: d.author?.username || 'anon',
             text: (d.text || '').replace(/@mferGPT\s*/gi, '').trim().slice(0, 120),
