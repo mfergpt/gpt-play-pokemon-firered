@@ -15,13 +15,13 @@
     background: #0a0a0f;
     color: #e0e0e0;
     font-family: 'JetBrains Mono', 'Courier New', monospace;
-    width: 1920px;
-    height: 1080px;
+    width: 100vw;
+    height: 100vh;
     overflow: hidden;
     position: relative;
+    display: flex;
+    flex-direction: column;
   }
-
-  /* CRT scanline overlay — disabled */
 
   @keyframes pulseGlow {
     0%, 100% { box-shadow: 0 0 8px #ffb67033; }
@@ -38,14 +38,25 @@
     50% { opacity: 0.7; }
   }
 
-  /* TITLE BAR */
+  @keyframes fadeInUp {
+    from { opacity: 0; transform: translateY(6px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  @keyframes blink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0; }
+  }
+
+  /* ─── TITLE BAR ─── */
   .title-bar {
-    height: 64px;
+    height: 56px;
+    flex-shrink: 0;
     background: linear-gradient(135deg, #12121a 0%, #0f1528 50%, #12121a 100%);
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 0 28px;
+    padding: 0 24px;
     border-bottom: 2px solid #ffb670;
     position: relative;
     z-index: 10;
@@ -60,23 +71,19 @@
     background: linear-gradient(90deg, transparent, #ffb67044, transparent);
   }
 
+  .title-left {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+
   .title {
     font-family: 'SartoshiScript', cursive;
-    font-size: 48px;
+    font-size: 44px;
     color: #ffb670;
     letter-spacing: 1px;
     text-shadow: 0 0 20px #ffb67044;
   }
-
-  .title-stats {
-    display: flex;
-    gap: 20px;
-    font-size: 18px;
-    color: #666;
-  }
-
-  .title-stats .val { color: #ffb670; font-weight: bold; }
-  .title-stats span { background: #ffffff06; padding: 4px 12px; border-radius: 6px; border: 1px solid #ffffff08; }
 
   .live-dot {
     display: inline-block;
@@ -88,283 +95,154 @@
     box-shadow: 0 0 8px #ef444488;
   }
 
-  /* MAIN AREA */
-  .main-area {
-    display: grid;
-    grid-template-columns: 400px 1fr 640px;
-    height: 628px;
-    gap: 0;
-  }
-
-  /* LEFT: Emulator */
-  .emulator-panel {
-    background: #000;
+  .title-pills {
     display: flex;
-    align-items: center;
-    justify-content: center;
-  }
-
-  .emulator-panel iframe { width: 100%; height: 100%; border: none; }
-
-  .emulator-placeholder {
-    color: #333;
-    font-size: 18px;
-    text-align: center;
-  }
-  .emulator-placeholder span { font-size: 48px; display: block; margin-bottom: 10px; }
-
-  /* CENTER: Stats */
-  .stats-panel {
-    padding: 14px 18px;
-    display: flex;
-    flex-direction: column;
     gap: 10px;
-    overflow: hidden;
-    background: linear-gradient(180deg, #0e0e16 0%, #101018 100%);
-    border-right: 1px solid #1a1a2e;
+    font-size: 15px;
   }
 
-  .stat-section h3 {
-    font-family: 'SartoshiScript', cursive;
-    font-size: 24px;
-    color: #ffb670;
-    margin-bottom: 4px;
-    text-shadow: 0 0 10px #ffb67022;
-  }
-
-  /* Trainer stat boxes */
-  .trainer-stats {
-    display: grid;
-    grid-template-columns: 1fr 1fr 1fr;
-    gap: 8px;
-  }
-
-  .stat-box {
-    background: linear-gradient(135deg, #14141e, #18182a);
-    border-radius: 10px;
-    padding: 10px 12px;
-    border: 1px solid #252540;
-    transition: border-color 0.3s;
-  }
-
-  .stat-box:hover { border-color: #ffb67044; }
-  .stat-box .label { font-size: 12px; color: #555; text-transform: uppercase; letter-spacing: 1px; }
-  .stat-box .value { font-size: 22px; color: #fff; font-weight: bold; margin-top: 2px; }
-
-  /* Badges */
-  .badges-row {
-    display: flex;
-    gap: 8px;
-    flex-wrap: wrap;
-  }
-
-  .badge-dot {
-    width: 30px;
-    height: 30px;
-    border-radius: 50%;
+  .pill {
+    background: #ffffff06;
+    padding: 5px 14px;
+    border-radius: 8px;
+    border: 1px solid #ffffff0a;
+    color: #666;
     display: flex;
     align-items: center;
-    justify-content: center;
-    font-size: 18px;
-    font-weight: bold;
-    transition: all 0.3s;
-  }
-
-  .badge-dot.earned {
-    background: linear-gradient(135deg, #ffb670, #ff8c00);
-    color: #000;
-    box-shadow: 0 0 12px #ffb67066;
-  }
-  .badge-dot.unearned { background: #16161e; color: #333; border: 1px solid #252540; }
-
-  /* Team grid */
-  .team-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr 1fr;
     gap: 6px;
   }
 
-  .pkmn-card {
-    background: linear-gradient(135deg, #14141e, #1a1a2e);
-    border-radius: 8px;
-    padding: 8px 10px;
-    border: 1px solid #252540;
-    transition: border-color 0.3s, box-shadow 0.3s;
+  .pill .val { color: #ffb670; font-weight: bold; }
+  .pill .label { color: #555; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; }
+
+  /* Token tickers */
+  .ticker-group {
+    display: flex;
+    gap: 10px;
   }
 
-  .pkmn-card:hover { border-color: #ffb67033; box-shadow: 0 0 8px #ffb67011; }
-  .pkmn-name { font-size: 15px; font-weight: bold; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .pkmn-sub { font-size: 13px; color: #666; }
-
-  .hp-bar {
-    height: 5px;
-    background: #1a1a2e;
-    border-radius: 3px;
-    margin-top: 4px;
-    overflow: hidden;
-  }
-
-  .hp-fill { height: 100%; border-radius: 3px; background: linear-gradient(90deg, #22c55e, #4ade80); transition: width 0.5s; }
-  .hp-fill.low { background: linear-gradient(90deg, #eab308, #facc15); }
-  .hp-fill.critical { background: linear-gradient(90deg, #dc2626, #f87171); }
-
-  /* Minimap */
-  .minimap-container {
-    background: #0e0e16;
-    border-radius: 8px;
-    padding: 4px;
-    border: 1px solid #252540;
+  .ticker {
     display: flex;
     align-items: center;
-    justify-content: center;
-    max-height: 140px;
-    overflow: hidden;
-  }
-
-  .minimap-container img { max-width: 100%; max-height: 132px; image-rendering: pixelated; }
-
-  /* Thought bubble */
-  .thought-bubble {
-    background: linear-gradient(135deg, #141420, #181830);
-    border: 1px solid #ffb67033;
-    border-radius: 12px;
-    padding: 10px 14px;
-    position: relative;
-    animation: pulseGlow 4s ease-in-out infinite;
-  }
-
-  .thought-bubble #chat-message { font-size: 15px; line-height: 1.5; color: #d0d0d0; }
-
-  .emotion-tag {
-    display: inline-block;
-    font-family: 'SartoshiScript', cursive;
-    font-size: 18px;
-    color: #ffb670;
-    background: #ffb67018;
-    padding: 1px 10px;
+    gap: 8px;
+    background: #ffffff06;
+    padding: 5px 14px;
     border-radius: 8px;
-    margin-bottom: 4px;
-    border: 1px solid #ffb67022;
+    border: 1px solid #ffffff0a;
+    font-size: 14px;
   }
 
-  /* Stream log */
-  .log-section { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+  .ticker .name { color: #ffb670; font-weight: bold; font-size: 13px; }
+  .ticker .price { color: #fff; font-weight: bold; }
+  .ticker .change { font-weight: bold; font-size: 13px; }
+  .ticker .change.up { color: #22c55e; }
+  .ticker .change.down { color: #ef4444; }
+  .ticker .change.flat { color: #666; }
 
-  .log-entries {
-    flex: 1;
-    overflow: hidden;
-    display: flex;
-    flex-direction: column-reverse;
-    font-size: 13px;
-    line-height: 1.4;
-    gap: 1px;
-  }
-
-  .log-entry {
-    padding: 2px 6px;
-    border-radius: 4px;
-    background: #ffffff03;
-    animation: slideIn 0.3s ease;
-  }
-  .log-entry:nth-child(odd) { background: #ffffff05; }
-  .log-entry .emotion { color: #ffb67088; font-size: 12px; font-style: italic; }
-  .log-entry .msg { color: #999; }
-
-  /* RIGHT: Webcam */
-  .webcam-panel {
-    background: #ffb670;
-    position: relative;
-  }
-
-  .webcam-panel iframe { width: 100%; height: 100%; border: none; }
-
-  /* BOTTOM AREA */
-  .bottom-area {
-    height: 388px;
+  /* ─── TOP ROW (webcam + feeds) ─── */
+  .top-row {
+    height: 200px;
+    flex-shrink: 0;
     display: grid;
-    grid-template-columns: 1fr 1fr 1fr;
-    border-top: 2px solid #ffb670;
+    grid-template-columns: clamp(220px, 16vw, 320px) 1fr 1fr;
+    border-bottom: 2px solid #ffb670;
     position: relative;
   }
 
-  .bottom-area::before {
+  .top-row::after {
     content: '';
     position: absolute;
-    top: -4px;
+    bottom: -4px;
     left: 0; right: 0;
     height: 4px;
     background: linear-gradient(90deg, transparent, #ffb67044, transparent);
   }
 
-  .chart-panel {
-    background: #0a0a0f;
-    border-right: 1px solid #1a1a2e;
+  /* ─── WEBCAM ─── */
+  .webcam-area {
     position: relative;
+    background: #ffb670;
     overflow: hidden;
   }
 
-  .chart-panel iframe { width: 100%; height: 100%; border: none; }
-
-  .chart-label {
-    position: absolute;
-    top: 8px;
-    left: 10px;
-    font-family: 'SartoshiScript', cursive;
-    font-size: 18px;
-    color: #ffb670;
-    z-index: 10;
-    background: rgba(10,10,15,0.85);
-    padding: 2px 10px;
-    border-radius: 6px;
-    border: 1px solid #ffb67022;
-    backdrop-filter: blur(4px);
+  .webcam-area iframe {
+    width: 100%;
+    height: 100%;
+    border: none;
   }
 
-  /* Social feeds */
+  /* ─── CURRENT SPEECH (in sidebar) ─── */
+  .current-speech {
+    background: linear-gradient(135deg, #141420, #181830);
+    border: 1px solid #ffb67044;
+    border-radius: 10px;
+    padding: 8px 12px;
+    min-height: 36px;
+    animation: pulseGlow 4s ease-in-out infinite;
+    transition: opacity 0.3s;
+  }
+
+  .current-speech.dimmed {
+    opacity: 0.4;
+    animation: none;
+  }
+
+  .current-speech .emotion-tag {
+    font-family: 'SartoshiScript', cursive;
+    font-size: 16px;
+    color: #ffb670;
+    margin-right: 6px;
+  }
+
+  .current-speech .msg {
+    font-size: 13px;
+    line-height: 1.5;
+    color: #d0d0d0;
+  }
+
+  .current-speech .typing-cursor {
+    display: inline-block;
+    width: 2px;
+    height: 12px;
+    background: #ffb670;
+    margin-left: 2px;
+    vertical-align: middle;
+    animation: blink 1s step-end infinite;
+  }
+
+  /* ─── FEEDS ─── */
   .feed-panel {
     background: linear-gradient(180deg, #0e0e16, #101018);
-    padding: 10px 14px;
+    padding: 8px 12px;
     overflow: hidden;
     display: flex;
     flex-direction: column;
     border-left: 1px solid #1a1a2e;
   }
 
-  .feed-section {
-    flex: 1;
-    overflow: hidden;
-    display: flex;
-    flex-direction: column;
-    min-height: 0;
-  }
-
-  .feed-section:first-child {
-    border-bottom: 1px solid #1a1a2e;
-    padding-bottom: 8px;
-    margin-bottom: 8px;
-  }
-
-  .feed-section h3 {
+  .feed-panel h3 {
     font-family: 'SartoshiScript', cursive;
-    font-size: 22px;
+    font-size: 20px;
     color: #ffb670;
-    margin-bottom: 6px;
+    margin-bottom: 4px;
     flex-shrink: 0;
     text-shadow: 0 0 10px #ffb67022;
   }
 
   .feed-entries {
     flex: 1;
-    overflow: hidden;
+    overflow-y: auto;
+    overflow-x: hidden;
     display: flex;
     flex-direction: column;
-    font-size: 14px;
+    justify-content: flex-end;
+    font-size: 13px;
     line-height: 1.4;
-    gap: 4px;
+    gap: 3px;
   }
 
   .feed-entry {
-    padding: 4px 8px;
+    padding: 3px 8px;
     color: #ccc;
     white-space: nowrap;
     overflow: hidden;
@@ -372,54 +250,332 @@
     border-radius: 4px;
     background: #ffffff06;
     flex-shrink: 0;
+    animation: fadeInUp 0.3s ease;
   }
 
   .feed-entry .username { color: #ffb670; font-weight: 600; margin-right: 6px; }
   .feed-entry .text { color: #ddd; }
 
-  /* Model selector */
-  .model-tag {
-    font-size: 18px;
-    background: #ffb67033;
+  /* ─── MAIN AREA (stats left + game right) ─── */
+  .main-area {
+    flex: 1;
+    display: grid;
+    grid-template-columns: clamp(260px, 20vw, 380px) 1fr;
+    min-height: 0;
+  }
+
+  /* ─── STATS SIDEBAR (left) ─── */
+  .stats-sidebar {
+    padding: 12px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    overflow: hidden;
+    background: linear-gradient(180deg, #0e0e16 0%, #101018 100%);
+    border-right: 1px solid #1a1a2e;
+  }
+
+  .stat-section h3 {
+    font-family: 'SartoshiScript', cursive;
+    font-size: 22px;
     color: #ffb670;
-    padding: 2px 8px;
-    border-radius: 10px;
+    margin-bottom: 3px;
+    text-shadow: 0 0 10px #ffb67022;
+  }
+
+  /* Trainer row */
+  .trainer-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+  }
+
+  .stat-box {
+    background: linear-gradient(135deg, #14141e, #18182a);
+    border-radius: 8px;
+    padding: 7px 10px;
+    border: 1px solid #252540;
+  }
+  .stat-box .label { font-size: 10px; color: #555; text-transform: uppercase; letter-spacing: 1px; }
+  .stat-box .value { font-size: 18px; color: #fff; font-weight: bold; margin-top: 1px; }
+  .stat-box .value.small { font-size: 12px; }
+
+  /* Badges */
+  .badges-row {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+
+  .badge-dot {
+    width: 26px; height: 26px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    font-weight: bold;
+  }
+
+  .badge-dot.earned {
+    background: linear-gradient(135deg, #ffb670, #ff8c00);
+    color: #000;
+    box-shadow: 0 0 10px #ffb67066;
+  }
+  .badge-dot.unearned { background: #16161e; color: #333; border: 1px solid #252540; }
+
+  /* Team */
+  .team-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 5px;
+  }
+
+  .pkmn-card {
+    background: linear-gradient(135deg, #14141e, #1a1a2e);
+    border-radius: 8px;
+    padding: 7px 9px;
+    border: 1px solid #252540;
+  }
+
+  .pkmn-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+  }
+
+  .pkmn-name { font-size: 13px; font-weight: bold; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100px; }
+  .pkmn-lv { font-size: 11px; color: #666; }
+
+  .hp-bar {
+    height: 4px;
+    background: #1a1a2e;
+    border-radius: 2px;
+    margin-top: 4px;
+    overflow: hidden;
+  }
+
+  .hp-fill { height: 100%; border-radius: 2px; background: linear-gradient(90deg, #22c55e, #4ade80); transition: width 0.5s; }
+  .hp-fill.low { background: linear-gradient(90deg, #eab308, #facc15); }
+  .hp-fill.critical { background: linear-gradient(90deg, #dc2626, #f87171); }
+
+  .pkmn-hp { font-size: 10px; color: #555; margin-top: 2px; font-family: 'JetBrains Mono', monospace; }
+
+  .pkmn-xp-bar {
+    height: 3px;
+    background: #1a1a2e;
+    border-radius: 2px;
+    margin-top: 2px;
+    overflow: hidden;
+  }
+  .pkmn-xp-fill { height: 100%; border-radius: 2px; background: linear-gradient(90deg, #3b82f6, #60a5fa); transition: width 0.5s; }
+
+  /* Minimap */
+  .minimap-container {
+    background: #0e0e16;
+    border-radius: 8px;
+    padding: 3px;
+    border: 1px solid #252540;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    max-height: 130px;
+    overflow: hidden;
+  }
+
+  .minimap-container img { max-width: 100%; max-height: 124px; image-rendering: pixelated; }
+
+  /* Counters row */
+  .counters-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 5px;
+  }
+
+  .counter-box {
+    background: linear-gradient(135deg, #14141e, #18182a);
+    border-radius: 8px;
+    padding: 5px 8px;
+    border: 1px solid #252540;
+    text-align: center;
+  }
+  .counter-box .label { font-size: 9px; color: #555; text-transform: uppercase; letter-spacing: 0.5px; }
+  .counter-box .value { font-size: 16px; color: #fff; font-weight: bold; }
+  .counter-box .value.deaths { color: #ef4444; }
+
+  /* Recent thoughts */
+  .recent-thoughts {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .thought-entry {
+    font-size: 11px;
+    padding: 5px 8px;
+    border-radius: 6px;
+    background: linear-gradient(135deg, #14141e, #181830);
+    border: 1px solid #252540;
+    border-left: 2px solid #ffb67044;
+    color: #aaa;
+    line-height: 1.4;
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    animation: slideIn 0.3s ease;
+  }
+
+  .thought-entry .emotion {
+    font-family: 'SartoshiScript', cursive;
+    color: #ffb670;
+    font-size: 13px;
+    margin-right: 4px;
+  }
+
+  /* ─── GAME PANEL (bottom-right, big) ─── */
+  .game-panel {
+    background: #000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+  }
+
+  .game-panel iframe { width: 100%; height: 100%; border: none; }
+
+  .game-placeholder {
+    width: 100%;
+    height: 100%;
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .game-placeholder img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  .splash-overlay {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    font-family: 'SartoshiScript', cursive;
+    font-size: 44px;
+    color: #ffb670;
+    text-align: right;
+    line-height: 1.3;
+    text-shadow: 0 0 40px #ffb67088, 0 2px 10px rgba(0,0,0,0.9), 0 0 80px rgba(0,0,0,0.7);
+    background: rgba(0, 0, 0, 0.5);
+    padding: 16px 28px;
+    border-radius: 12px;
+    animation: subtlePulse 3s ease-in-out infinite;
+    z-index: 10;
+    max-width: 45%;
+  }
+
+  /* ─── RESPONSIVE ─── */
+  @media (max-width: 1400px) {
+    .title { font-size: 36px; }
+    .title-pills { gap: 6px; font-size: 13px; }
+    .pill { padding: 4px 10px; }
+    .ticker { font-size: 12px; padding: 4px 10px; }
+    .stat-section h3 { font-size: 18px; }
+    .stat-box .value { font-size: 15px; }
+    .pkmn-name { font-size: 11px; }
+    .pkmn-lv { font-size: 10px; }
+    .counter-box .value { font-size: 14px; }
+    .action-entry { font-size: 10px; }
+    .feed-entries { font-size: 12px; }
+    .speech-bubble { font-size: 11px; }
+  }
+
+  @media (max-width: 1100px) {
+    .title-bar { padding: 0 14px; height: 48px; }
+    .title { font-size: 28px; }
+    .ticker-group { gap: 6px; }
+    .ticker .name { font-size: 11px; }
+    .title-pills { font-size: 11px; }
+    .team-grid { grid-template-columns: 1fr; }
+    .trainer-row { grid-template-columns: 1fr; }
+    .counters-row { grid-template-columns: 1fr 1fr; }
+    .top-row { height: 160px; grid-template-columns: clamp(180px, 18vw, 280px) 1fr 1fr; }
+    .feed-panel h3 { font-size: 16px; }
+  }
+
+  @media (max-width: 800px) {
+    .ticker-group { display: none; }
+    .title-pills { flex-wrap: wrap; }
+    .top-row { grid-template-columns: 1fr 1fr; }
+    .webcam-area { display: none; }
+    .stats-sidebar { padding: 8px 10px; gap: 6px; }
   }
 </style>
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
 </head>
 <body>
 
+<!-- ─── TITLE BAR ─── -->
 <div class="title-bar">
-  <div class="title"><span class="live-dot"></span>mfergpt plays pokemon</div>
-  <div class="title-stats">
-    <span>step <span class="val" id="step-count">0</span></span>
-    <span>model <span class="val" id="model-name">-</span></span>
-    <span>cost <span class="val" id="total-cost">$0.00</span></span>
+  <div class="title-left">
+    <div class="title"><span class="live-dot"></span>mfergpt plays pokemon</div>
+  </div>
+  <div class="title-pills">
+    <div class="pill"><span class="label">badges</span> <span class="val" id="badge-count-pill">0/8</span></div>
+    <div class="pill"><span class="label">money</span> <span class="val" id="money-pill">$0</span></div>
+    <div class="pill"><span class="label">team</span> <span class="val" id="team-count-pill">0</span></div>
+    <div class="pill"><span class="label">encounters</span> <span class="val" id="encounters-pill">0</span></div>
+    <div class="pill"><span class="label">whiteouts</span> <span class="val" id="whiteouts-pill" style="color:#ef4444;">0</span></div>
+    <div class="pill"><span class="label">caught</span> <span class="val" id="caught-pill">0</span></div>
+  </div>
+  <div class="ticker-group">
+    <div class="ticker">
+      <span class="name">$MFERGPT</span>
+      <span class="price" id="mfergpt-price">-</span>
+      <span class="change flat" id="mfergpt-change">-</span>
+    </div>
+    <div class="ticker">
+      <span class="name">$MFER</span>
+      <span class="price" id="mfer-price">-</span>
+      <span class="change flat" id="mfer-change">-</span>
+    </div>
   </div>
 </div>
 
-<div class="main-area">
-  <!-- LEFT: 3D Webcam -->
-  <div class="webcam-panel">
+<!-- ─── TOP ROW (webcam + feeds) ─── -->
+<div class="top-row">
+  <div class="webcam-area">
     <iframe src="/webcam" id="webcam-frame"></iframe>
   </div>
+  <div class="feed-panel">
+    <h3>🐦 mentions</h3>
+    <div class="feed-entries" id="mentions-feed"></div>
+  </div>
+  <div class="feed-panel">
+    <h3>💬 twitch chat</h3>
+    <div class="feed-entries" id="twitch-feed"></div>
+  </div>
+</div>
 
-  <!-- CENTER: Stats -->
-  <div class="stats-panel" id="stats-panel">
+<!-- ─── MAIN AREA (stats left + game right) ─── -->
+<div class="main-area">
+  <!-- LEFT: Stats sidebar -->
+  <div class="stats-sidebar" id="stats-sidebar">
     <div class="stat-section">
-      <div class="trainer-stats">
+      <div class="trainer-row">
         <div class="stat-box">
           <div class="label">Money</div>
           <div class="value" id="money">$0</div>
         </div>
         <div class="stat-box">
-          <div class="label">Badges</div>
-          <div class="value" id="badge-count">0/8</div>
-        </div>
-        <div class="stat-box">
           <div class="label">Location</div>
-          <div class="value" id="location" style="font-size:11px;">-</div>
+          <div class="value small" id="location">-</div>
         </div>
       </div>
     </div>
@@ -431,7 +587,24 @@
     <div class="stat-section">
       <h3>team</h3>
       <div class="team-grid" id="team-grid">
-        <div class="pkmn-card"><div class="pkmn-sub">waiting...</div></div>
+        <div class="pkmn-card"><div class="pkmn-lv">waiting...</div></div>
+      </div>
+    </div>
+
+    <div class="stat-section">
+      <div class="counters-row">
+        <div class="counter-box">
+          <div class="label">Encounters</div>
+          <div class="value" id="encounters">0</div>
+        </div>
+        <div class="counter-box">
+          <div class="label">Whiteouts</div>
+          <div class="value deaths" id="whiteouts">0</div>
+        </div>
+        <div class="counter-box">
+          <div class="label">Caught</div>
+          <div class="value" id="caught">0</div>
+        </div>
       </div>
     </div>
 
@@ -441,43 +614,25 @@
       </div>
     </div>
 
-    <div class="thought-bubble" id="thought-bubble">
-      <div class="emotion-tag" id="emotion-tag">thinking</div>
-      <div id="chat-message">waiting for first move...</div>
+    <div class="stat-section">
+      <div class="current-speech dimmed" id="speech-bubble">
+        <span class="emotion-tag" id="emotion-tag">thinking</span>
+        <span class="msg" id="chat-message">waiting for first move...</span>
+        <span class="typing-cursor" id="typing-cursor" style="display:none;"></span>
+      </div>
     </div>
 
-    <div class="log-section">
-      <h3 style="font-family:'SartoshiScript',cursive;font-size:18px;color:#ffb670;margin-bottom:4px;text-shadow:0 0 10px #ffb67022;">stream log</h3>
-      <div class="log-entries" id="log-entries"></div>
+    <div class="stat-section" style="flex:1;min-height:0;display:flex;flex-direction:column;">
+      <h3>thoughts</h3>
+      <div class="recent-thoughts" id="recent-thoughts"></div>
     </div>
   </div>
 
-  <!-- RIGHT: Emulator -->
-  <div class="emulator-panel">
-    <div class="emulator-placeholder">
-      <span>🎮</span>
-      OBS: capture mGBA window here
-    </div>
-  </div>
-</div>
-
-<div class="bottom-area">
-  <div class="chart-panel">
-    <div class="chart-label">$mfergpt</div>
-    <iframe src="https://www.geckoterminal.com/base/pools/0x23ce6e13e06fc19bb5b5948334019fc75b7d0773eddf21a72008ac0ab8753d61?embed=1&info=0&swaps=0&grayscale=0&light_chart=0" loading="lazy"></iframe>
-  </div>
-  <div class="chart-panel">
-    <div class="chart-label">$mfer</div>
-    <iframe src="https://www.geckoterminal.com/base/pools/0xb08a99ab559e5456907278727a3b0d968c0a313b?embed=1&info=0&swaps=0&grayscale=0&light_chart=0" loading="lazy"></iframe>
-  </div>
-  <div class="feed-panel">
-    <div class="feed-section">
-      <h3>🐦 mentions</h3>
-      <div class="feed-entries" id="mentions-feed"></div>
-    </div>
-    <div class="feed-section">
-      <h3>💬 twitch chat</h3>
-      <div class="feed-entries" id="twitch-feed"></div>
+  <!-- RIGHT: Game (big) -->
+  <div class="game-panel">
+    <div class="game-placeholder" id="game-placeholder">
+      <img src="/splash.png" alt="mfergpt plays pokemon">
+      <div class="splash-overlay">mfergpt plays pokemon starting tomorrow</div>
     </div>
   </div>
 </div>
@@ -485,15 +640,21 @@
 <script>
 const WS_HOST = window.location.hostname || 'localhost';
 const WS_PORT = 9885;
+const STREAMER_PORT = 9886;
 const MINIMAP_URL = `http://${WS_HOST}:${WS_PORT}/minimapSnapshot`;
 const MODEL_URL = `http://${WS_HOST}:${WS_PORT}/api/model`;
 
 const BADGE_NAMES = ['BOULDER','CASCADE','THUNDER','RAINBOW','SOUL','MARSH','VOLCANO','EARTH'];
 const BADGE_SHORT = ['B','C','T','R','S','M','V','E'];
 
+let tokenHistory = [];
+const TOKEN_RATE_WINDOW_MS = 5 * 60 * 1000;
+
 let ws = null;
 let logs = [];
-const MAX_LOGS = 50;
+const MAX_LOGS = 8;
+let speechTimeout = null;
+let counters = { encounters: 0, whiteouts: 0, caught: 0 };
 
 const badgesRow = document.getElementById('badges-row');
 badgesRow.innerHTML = BADGE_NAMES.map((name, i) => 
@@ -514,15 +675,18 @@ function handleMessage(msg) {
   const p = msg.payload || msg;
   if (type === 'full_state' || type === 'state_update') updateStats(p);
   if (type === 'action_start') updateAction(p);
+  if (type === 'token_usage_total' || type === 'token_usage') updateTokens(p);
 }
 
 function updateStats(data) {
   const trainer = data.current_trainer_data;
   if (trainer) {
-    document.getElementById('money').textContent = `$${(trainer.money || 0).toLocaleString()}`;
+    const money = trainer.money || 0;
+    document.getElementById('money').textContent = `$${money.toLocaleString()}`;
+    document.getElementById('money-pill').textContent = `$${money.toLocaleString()}`;
     const badges = trainer.badges || {};
-    const earned = Object.keys(badges).filter(k => badges[k]);
-    document.getElementById('badge-count').textContent = `${earned.length}/8`;
+    const earnedCount = Object.keys(badges).filter(k => badges[k]).length;
+    document.getElementById('badge-count-pill').textContent = `${earnedCount}/8`;
     
     const pos = trainer.position || {};
     const mapName = (pos.map_name || '-').replace(/_/g, ' ');
@@ -542,38 +706,80 @@ function updateStats(data) {
       const curHp = p.current_hp || 0;
       const pct = Math.max(0, Math.min(100, (curHp / maxHp) * 100));
       const hpClass = pct <= 20 ? 'critical' : pct <= 50 ? 'low' : '';
+      const xpPct = p.xp_to_next ? Math.max(0, Math.min(100, ((p.xp_current || 0) / p.xp_to_next) * 100)) : 0;
       return `
         <div class="pkmn-card">
-          <div class="pkmn-name">${p.nickname || p.species_name || '?'}</div>
-          <div class="pkmn-sub">${p.species_name || '?'} Lv${p.level || 0}</div>
+          <div class="pkmn-head">
+            <div class="pkmn-name">${p.nickname || p.species_name || '?'}</div>
+            <div class="pkmn-lv">Lv${p.level || 0}</div>
+          </div>
           <div class="hp-bar"><div class="hp-fill ${hpClass}" style="width:${pct}%"></div></div>
-          <div class="pkmn-sub">${curHp}/${maxHp} HP</div>
+          <div class="pkmn-hp">${curHp}/${maxHp}</div>
+          ${p.xp_to_next ? `<div class="pkmn-xp-bar"><div class="pkmn-xp-fill" style="width:${xpPct}%"></div></div>` : ''}
         </div>`;
     }).join('');
   }
   
-  document.getElementById('step-count').textContent = data.steps || 0;
+  // Team count pill
+  document.getElementById('team-count-pill').textContent = team.length;
+  
   if (data.total_tokens_accumulated) {
-    document.getElementById('total-cost').textContent = `~$${(data.total_tokens_accumulated * 0.000002).toFixed(2)}`;
+    tokenHistory.push({ ts: Date.now(), tokens: data.total_tokens_accumulated });
+    const cutoff = Date.now() - TOKEN_RATE_WINDOW_MS;
+    tokenHistory = tokenHistory.filter(t => t.ts > cutoff);
+  }
+
+  const mem = data.memory || {};
+  if (mem.encounters_total !== undefined) counters.encounters = Number(mem.encounters_total) || 0;
+  if (mem.whiteout_count !== undefined) counters.whiteouts = Number(mem.whiteout_count) || 0;
+  if (mem.pokemon_caught_count !== undefined) counters.caught = Number(mem.pokemon_caught_count) || 0;
+  document.getElementById('encounters').textContent = counters.encounters;
+  document.getElementById('encounters-pill').textContent = counters.encounters;
+  document.getElementById('whiteouts').textContent = counters.whiteouts;
+  document.getElementById('whiteouts-pill').textContent = counters.whiteouts;
+  document.getElementById('caught').textContent = counters.caught;
+  document.getElementById('caught-pill').textContent = counters.caught;
+}
+
+function updateTokens(data) {
+  if (data && data.total_tokens) {
+    tokenHistory.push({ ts: Date.now(), tokens: data.total_tokens });
+    const cutoff = Date.now() - TOKEN_RATE_WINDOW_MS;
+    tokenHistory = tokenHistory.filter(t => t.ts > cutoff);
   }
 }
 
 function updateAction(data) {
-  if (data.chat_message) document.getElementById('chat-message').textContent = data.chat_message;
-  if (data.avatar_emotion) document.getElementById('emotion-tag').textContent = data.avatar_emotion;
+  if (data.chat_message) {
+    const bubble = document.getElementById('speech-bubble');
+    const msgEl = document.getElementById('chat-message');
+    const emotionEl = document.getElementById('emotion-tag');
+    const cursor = document.getElementById('typing-cursor');
+    
+    msgEl.textContent = data.chat_message.length > 100 
+      ? data.chat_message.substring(0, 97) + '...' 
+      : data.chat_message;
+    if (data.avatar_emotion) emotionEl.textContent = data.avatar_emotion;
+    
+    bubble.classList.remove('dimmed');
+    cursor.style.display = 'inline-block';
+    
+    if (speechTimeout) clearTimeout(speechTimeout);
+    setTimeout(() => { cursor.style.display = 'none'; }, 2000);
+    speechTimeout = setTimeout(() => { bubble.classList.add('dimmed'); }, 10000);
+  }
   
   if (data.chat_message) {
     logs.unshift({ msg: data.chat_message, emotion: data.avatar_emotion || '' });
     if (logs.length > MAX_LOGS) logs.pop();
-    renderLogs();
+    renderThoughts();
   }
 }
 
-function renderLogs() {
-  document.getElementById('log-entries').innerHTML = logs.map(l => `
-    <div class="log-entry">
-      <span class="emotion">${l.emotion}</span>
-      <span class="msg">${escapeHtml(l.msg)}</span>
+function renderThoughts() {
+  document.getElementById('recent-thoughts').innerHTML = logs.map(l => `
+    <div class="thought-entry">
+      <span class="emotion">${l.emotion}</span>${escapeHtml(l.msg)}
     </div>
   `).join('');
 }
@@ -603,41 +809,75 @@ async function pollModel() {
   } catch (e) {}
 }
 
-connect();
-setInterval(pollMinimap, 2000);
-setInterval(pollModel, 10000);
-pollMinimap();
-pollModel();
+const MFERGPT_POOL = '0x23ce6e13e06fc19bb5b5948334019fc75b7d0773eddf21a72008ac0ab8753d61';
+const MFER_POOL = '0xb08a99ab559e5456907278727a3b0d968c0a313b';
 
-// Mentions feed
+async function pollPrices() {
+  try {
+    const res = await fetch(`https://api.dexscreener.com/latest/dex/pairs/base/${MFERGPT_POOL},${MFER_POOL}`);
+    if (!res.ok) return;
+    const data = await res.json();
+    const pairs = data.pairs || [];
+    
+    for (const pair of pairs) {
+      const addr = (pair.pairAddress || '').toLowerCase();
+      let priceEl, changeEl;
+      
+      if (addr === MFERGPT_POOL.toLowerCase()) {
+        priceEl = document.getElementById('mfergpt-price');
+        changeEl = document.getElementById('mfergpt-change');
+      } else if (addr === MFER_POOL.toLowerCase()) {
+        priceEl = document.getElementById('mfer-price');
+        changeEl = document.getElementById('mfer-change');
+      } else continue;
+      
+      const price = Number(pair.priceUsd || 0);
+      priceEl.textContent = price < 0.0001 ? `$${price.toFixed(10)}` : price < 0.01 ? `$${price.toFixed(8)}` : `$${price.toFixed(4)}`;
+      
+      const change5m = pair.priceChange?.m5 ?? pair.priceChange?.h1 ?? 0;
+      const pct = Number(change5m);
+      changeEl.textContent = `${pct >= 0 ? '▲' : '▼'} ${Math.abs(pct).toFixed(1)}%`;
+      changeEl.className = `change ${pct > 0 ? 'up' : pct < 0 ? 'down' : 'flat'}`;
+    }
+  } catch (e) {}
+}
+
 const mentionsFeed = document.getElementById('mentions-feed');
 async function pollMentions() {
   try {
-    const res = await fetch(`http://${WS_HOST}:9886/api/mentions`);
+    const res = await fetch(`http://${WS_HOST}:${STREAMER_PORT}/api/mentions`);
     if (!res.ok) return;
     const mentions = await res.json();
     mentionsFeed.innerHTML = mentions.reverse().map(m =>
-      `<div class="feed-entry"><span class="username">@${m.username}</span> <span class="text">${m.text}</span></div>`
+      `<div class="feed-entry"><span class="username">@${escapeHtml(m.username)}</span><span class="text">${escapeHtml(m.text)}</span></div>`
     ).join('');
     mentionsFeed.scrollTop = mentionsFeed.scrollHeight;
   } catch(e) {}
 }
-setInterval(pollMentions, 15000);
-pollMentions();
 
-// Twitch chat
 const twitchFeed = document.getElementById('twitch-feed');
 async function pollTwitch() {
   try {
-    const res = await fetch(`http://${WS_HOST}:9886/api/twitch-chat`);
+    const res = await fetch(`http://${WS_HOST}:${STREAMER_PORT}/api/twitch-chat`);
     if (!res.ok) return;
     const msgs = await res.json();
     twitchFeed.innerHTML = msgs.map(m =>
-      `<div class="feed-entry"><span class="username">${m.username}</span> <span class="text">${m.text}</span></div>`
+      `<div class="feed-entry"><span class="username">${escapeHtml(m.username)}</span><span class="text">${escapeHtml(m.text)}</span></div>`
     ).join('');
+    twitchFeed.scrollTop = twitchFeed.scrollHeight;
   } catch(e) {}
 }
+
+connect();
+setInterval(pollMinimap, 2000);
+setInterval(pollModel, 10000);
+setInterval(pollPrices, 30000);
+setInterval(pollMentions, 15000);
 setInterval(pollTwitch, 3000);
+pollMinimap();
+pollModel();
+pollPrices();
+pollMentions();
 pollTwitch();
 </script>
 </body>
