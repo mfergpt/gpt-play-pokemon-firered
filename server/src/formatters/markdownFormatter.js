@@ -640,6 +640,22 @@ function minimapToMarkdown(mm, minimapPlayerX, minimapPlayerY, map_id, map_name,
         out.push(`
 ## Core Requirements
 
+**🚨 CRITICAL - Turn-Before-Move Mechanic:**
+In FireRed, if your character is facing one direction and you press a DIFFERENT direction, the FIRST press only TURNS your character to face that direction — it does NOT move you. You must press the SAME direction a SECOND time to actually move. This means:
+- If facing DOWN and you press RIGHT: first press = turn to face right (no movement). Second press RIGHT = move right.
+- If you're already facing the direction you want to go, one press = one step (normal).
+- **This is why navigation sometimes feels "stuck" — you pressed a direction once and nothing happened. You just turned. Press it again to move.**
+- When counting steps to a destination, account for the possible extra turn press if you're not already facing that direction.
+- The path_to_location tool handles this automatically, but manual key_press navigation requires awareness of your current facing direction.
+
+**🚨 CRITICAL - Don't Overthink Simple Movement:**
+If you bump into something (a sign, NPC, wall) and can't move forward, DON'T re-analyze the entire map. Just go around it with simple directional inputs:
+- Blocked going DOWN? Try: LEFT, DOWN, DOWN, RIGHT (or RIGHT, DOWN, DOWN, LEFT) to walk around the obstacle.
+- Blocked going RIGHT? Try: DOWN, RIGHT, RIGHT, UP (or UP, RIGHT, RIGHT, DOWN).
+- **2-3 simple inputs to sidestep is ALWAYS better than 15 turns of analysis.**
+- If you've been stuck on the same tile for 3+ turns, you're overthinking it. Just move in any free direction and reroute.
+- Signs, NPCs, and ledges are small obstacles — walk around them, don't strategize about them.
+
 **Mark Defeated Trainers:** 
 - Always add markers (💀) after trainer battles for progress tracking (Do not add a marker for the rival after you defeated him, because he is not stationary, when you defeat him he moving away from you).
 - The defeated trainer will always be the one in front of you (The one you face after the battle), place the marker on the tile where the trainer is standing.
