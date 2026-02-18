@@ -295,7 +295,7 @@ async function gameLoop() {
             // Proactive history size check: if history JSON exceeds ~2MB, force summary
             // This prevents the API call from hanging on oversized prompts
             const historyJsonSize = JSON.stringify(state.history).length;
-            const shouldSummarizeBasedOnSize = historyJsonSize > 1_000_000;
+            const shouldSummarizeBasedOnSize = historyJsonSize > 3_000_000;
             if (shouldSummarizeBasedOnSize) {
                 console.log(`>>> PROACTIVE: history JSON is ${(historyJsonSize / 1_000_000).toFixed(1)}MB — forcing summary to prevent hang <<<`);
             }
