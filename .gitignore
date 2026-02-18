@@ -16,3 +16,6 @@ streamer/node_modules
 streamer/.stream-keys
 streamer/tts_output/
 server/tmp/
+streamer-preview/node_modules/
+streamer-preview/tts_output/
+streamer-preview/.stream-keys
