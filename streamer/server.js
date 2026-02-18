@@ -74,16 +74,32 @@ const MIME_TYPES = {
   '.wav': 'audio/wav',
 };
 
+const PIPER_BIN = process.env.HOME + '/Library/Python/3.9/bin/piper';
+const PIPER_VOICE = process.env.HOME + '/.openclaw/workspace/builds/mfer-scenes/voices/ryan.onnx';
+
+function piperFallback(text, step) {
+  try {
+    const wavFile = path.join(TTS_OUTPUT_DIR, `step_${step}.wav`);
+    execSync(`echo ${JSON.stringify(text)} | ${PIPER_BIN} --model ${PIPER_VOICE} --output_file ${wavFile}`, { timeout: 15000 });
+    console.log(`[TTS] Piper fallback generated: ${wavFile}`);
+    currentAudioFile = `step_${step}.wav`;
+    return wavFile;
+  } catch (e) {
+    console.error('[TTS] Piper fallback error:', e.message);
+    return null;
+  }
+}
+
 async function processTTS(text, step) {
   if (!text || text.length < 5) return null;
   
   const outFile = path.join(TTS_OUTPUT_DIR, `step_${step}.mp3`);
   
-  // Use OpenAI TTS
+  // Try OpenAI TTS first, fall back to local Piper
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
-    console.log('[TTS] No OPENAI_API_KEY, skipping TTS');
-    return null;
+    console.log('[TTS] No OPENAI_API_KEY, trying Piper fallback');
+    return piperFallback(text, step);
   }
   
   try {
@@ -105,8 +121,8 @@ async function processTTS(text, step) {
     });
     
     if (!res.ok) {
-      console.error('[TTS] API error:', res.status, await res.text());
-      return null;
+      console.error('[TTS] OpenAI error:', res.status, '— falling back to Piper');
+      return piperFallback(text, step);
     }
     
     const buffer = Buffer.from(await res.arrayBuffer());
@@ -115,8 +131,8 @@ async function processTTS(text, step) {
     currentAudioFile = `step_${step}.mp3`;
     return outFile;
   } catch (e) {
-    console.error('[TTS] Error:', e.message);
-    return null;
+    console.error('[TTS] OpenAI error:', e.message, '— falling back to Piper');
+    return piperFallback(text, step);
   }
 }
 
@@ -213,7 +229,8 @@ const server = http.createServer((req, res) => {
       return;
     }
     const audioData = fs.readFileSync(audioPath);
-    res.writeHead(200, { 'Content-Type': 'audio/mpeg', 'Content-Length': audioData.length });
+    const ctype = currentAudioFile.endsWith('.wav') ? 'audio/wav' : 'audio/mpeg';
+    res.writeHead(200, { 'Content-Type': ctype, 'Content-Length': audioData.length });
     res.end(audioData);
     return;
   }
