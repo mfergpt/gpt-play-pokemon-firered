@@ -146,6 +146,45 @@ const server = http.createServer((req, res) => {
   const pathname = url.pathname;
   
   // API: streamer state
+  if (pathname === '/api/prices') {
+    try {
+      const https = require('https');
+      const pools = '0x23ce6e13e06fc19bb5b5948334019fc75b7d0773eddf21a72008ac0ab8753d61,0xb08a99ab559e5456907278727a3b0d968c0a313b';
+      https.get(`https://api.dexscreener.com/latest/dex/pairs/base/${pools}`, (apiRes) => {
+        let body = '';
+        apiRes.on('data', c => body += c);
+        apiRes.on('end', () => {
+          res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+          res.end(body);
+        });
+      }).on('error', () => {
+        res.writeHead(500); res.end('{}');
+      });
+    } catch (e) { res.writeHead(500); res.end('{}'); }
+    return;
+  }
+
+  if (pathname === '/api/game-state') {
+    try {
+      const gamePath = path.join(__dirname, '..', 'server', 'gpt_data', 'game_data.json');
+      const data = fs.readFileSync(gamePath, 'utf8');
+      const game = JSON.parse(data);
+      const slim = {
+        current_pokemon_data: game.current_pokemon_data || [],
+        current_trainer_data: game.current_trainer_data || {},
+        battle_data: game.battle_data || {},
+        is_in_battle: game.is_in_battle || false,
+        step: game.step,
+      };
+      res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+      res.end(JSON.stringify(slim));
+    } catch (e) {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ current_pokemon_data: [], current_trainer_data: {} }));
+    }
+    return;
+  }
+
   if (pathname === '/api/streamer-state') {
     try {
       const data = fs.readFileSync(STREAMER_STATE_PATH, 'utf8');

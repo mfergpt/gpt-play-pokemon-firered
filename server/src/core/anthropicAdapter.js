@@ -224,6 +224,12 @@ async function* anthropicResponsesCreate(options) {
           if (block.text) chars += block.text.length;
           else if (block.content) chars += block.content.length;
           else if (block.input) chars += JSON.stringify(block.input).length;
+          // Base64 images are ~1 token per 1.5 chars, not per 4
+          if (block.type === 'image' || block.image_url || block.type === 'input_image') {
+            const imgData = block.image_url || block.source?.data || '';
+            const imgLen = typeof imgData === 'string' ? imgData.length : JSON.stringify(imgData).length;
+            chars += Math.ceil(imgLen * 2); // images cost way more tokens than text
+          }
         }
       }
     }
@@ -231,19 +237,39 @@ async function* anthropicResponsesCreate(options) {
   };
 
   let estimated = estimateTokens(cleanedMessages);
-  const TOKEN_LIMIT = 180000;
-  while (estimated > TOKEN_LIMIT && cleanedMessages.length > 10) {
+  const TOKEN_LIMIT = 150000;
+  while (estimated > TOKEN_LIMIT && cleanedMessages.length > 4) {
     // Remove from the front (oldest), but keep the very first message for context
     cleanedMessages.splice(1, 2); // Remove pairs to maintain alternation
+    estimated = estimateTokens(cleanedMessages);
+  }
+  if (estimated > TOKEN_LIMIT && cleanedMessages.length > 2) {
+    // Nuclear option: keep only last 2 messages
+    console.warn(`[Anthropic] NUCLEAR TRIM: estimated ${estimated} tokens, keeping only last 2 messages`);
+    cleanedMessages = cleanedMessages.slice(-2);
     estimated = estimateTokens(cleanedMessages);
   }
   if (estimated > TOKEN_LIMIT) {
     console.warn(`[Anthropic] Warning: estimated ${estimated} tokens still exceeds limit after trimming`);
   }
 
+  // Sanitize all string content to remove unpaired surrogates before sending
+  const sanitize = (obj) => {
+    if (typeof obj === 'string') return obj.replace(/[\uD800-\uDFFF]/g, '\uFFFD');
+    if (Array.isArray(obj)) return obj.map(sanitize);
+    if (obj && typeof obj === 'object') {
+      const out = {};
+      for (const [k, v] of Object.entries(obj)) out[k] = sanitize(v);
+      return out;
+    }
+    return obj;
+  };
+  cleanedMessages = sanitize(cleanedMessages);
+  const sanitizedSystem = typeof system === 'string' ? sanitize(system) : system;
+
   const params = {
     model,
-    system: system || undefined,
+    system: sanitizedSystem || undefined,
     messages: cleanedMessages,
     max_tokens: options.max_output_tokens || 8192,
     stream: true,

@@ -1,0 +1,644 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>mferGPT plays pokemon</title>
+<style>
+  @font-face {
+    font-family: 'SartoshiScript';
+    src: url('/SartoshiScript-Regular.otf') format('opentype');
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  
+  body {
+    background: #0a0a0f;
+    color: #e0e0e0;
+    font-family: 'JetBrains Mono', 'Courier New', monospace;
+    width: 1920px;
+    height: 1080px;
+    overflow: hidden;
+    position: relative;
+  }
+
+  /* CRT scanline overlay — disabled */
+
+  @keyframes pulseGlow {
+    0%, 100% { box-shadow: 0 0 8px #ffb67033; }
+    50% { box-shadow: 0 0 16px #ffb67055; }
+  }
+
+  @keyframes slideIn {
+    from { opacity: 0; transform: translateY(-4px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  @keyframes subtlePulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.7; }
+  }
+
+  /* TITLE BAR */
+  .title-bar {
+    height: 64px;
+    background: linear-gradient(135deg, #12121a 0%, #0f1528 50%, #12121a 100%);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 28px;
+    border-bottom: 2px solid #ffb670;
+    position: relative;
+    z-index: 10;
+  }
+
+  .title-bar::after {
+    content: '';
+    position: absolute;
+    bottom: -4px;
+    left: 0; right: 0;
+    height: 4px;
+    background: linear-gradient(90deg, transparent, #ffb67044, transparent);
+  }
+
+  .title {
+    font-family: 'SartoshiScript', cursive;
+    font-size: 48px;
+    color: #ffb670;
+    letter-spacing: 1px;
+    text-shadow: 0 0 20px #ffb67044;
+  }
+
+  .title-stats {
+    display: flex;
+    gap: 20px;
+    font-size: 18px;
+    color: #666;
+  }
+
+  .title-stats .val { color: #ffb670; font-weight: bold; }
+  .title-stats span { background: #ffffff06; padding: 4px 12px; border-radius: 6px; border: 1px solid #ffffff08; }
+
+  .live-dot {
+    display: inline-block;
+    width: 8px; height: 8px;
+    background: #ef4444;
+    border-radius: 50%;
+    margin-right: 6px;
+    animation: subtlePulse 2s ease-in-out infinite;
+    box-shadow: 0 0 8px #ef444488;
+  }
+
+  /* MAIN AREA */
+  .main-area {
+    display: grid;
+    grid-template-columns: 400px 1fr 640px;
+    height: 628px;
+    gap: 0;
+  }
+
+  /* LEFT: Emulator */
+  .emulator-panel {
+    background: #000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .emulator-panel iframe { width: 100%; height: 100%; border: none; }
+
+  .emulator-placeholder {
+    color: #333;
+    font-size: 18px;
+    text-align: center;
+  }
+  .emulator-placeholder span { font-size: 48px; display: block; margin-bottom: 10px; }
+
+  /* CENTER: Stats */
+  .stats-panel {
+    padding: 14px 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    overflow: hidden;
+    background: linear-gradient(180deg, #0e0e16 0%, #101018 100%);
+    border-right: 1px solid #1a1a2e;
+  }
+
+  .stat-section h3 {
+    font-family: 'SartoshiScript', cursive;
+    font-size: 24px;
+    color: #ffb670;
+    margin-bottom: 4px;
+    text-shadow: 0 0 10px #ffb67022;
+  }
+
+  /* Trainer stat boxes */
+  .trainer-stats {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 8px;
+  }
+
+  .stat-box {
+    background: linear-gradient(135deg, #14141e, #18182a);
+    border-radius: 10px;
+    padding: 10px 12px;
+    border: 1px solid #252540;
+    transition: border-color 0.3s;
+  }
+
+  .stat-box:hover { border-color: #ffb67044; }
+  .stat-box .label { font-size: 12px; color: #555; text-transform: uppercase; letter-spacing: 1px; }
+  .stat-box .value { font-size: 22px; color: #fff; font-weight: bold; margin-top: 2px; }
+
+  /* Badges */
+  .badges-row {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .badge-dot {
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    font-weight: bold;
+    transition: all 0.3s;
+  }
+
+  .badge-dot.earned {
+    background: linear-gradient(135deg, #ffb670, #ff8c00);
+    color: #000;
+    box-shadow: 0 0 12px #ffb67066;
+  }
+  .badge-dot.unearned { background: #16161e; color: #333; border: 1px solid #252540; }
+
+  /* Team grid */
+  .team-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 6px;
+  }
+
+  .pkmn-card {
+    background: linear-gradient(135deg, #14141e, #1a1a2e);
+    border-radius: 8px;
+    padding: 8px 10px;
+    border: 1px solid #252540;
+    transition: border-color 0.3s, box-shadow 0.3s;
+  }
+
+  .pkmn-card:hover { border-color: #ffb67033; box-shadow: 0 0 8px #ffb67011; }
+  .pkmn-name { font-size: 15px; font-weight: bold; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .pkmn-sub { font-size: 13px; color: #666; }
+
+  .hp-bar {
+    height: 5px;
+    background: #1a1a2e;
+    border-radius: 3px;
+    margin-top: 4px;
+    overflow: hidden;
+  }
+
+  .hp-fill { height: 100%; border-radius: 3px; background: linear-gradient(90deg, #22c55e, #4ade80); transition: width 0.5s; }
+  .hp-fill.low { background: linear-gradient(90deg, #eab308, #facc15); }
+  .hp-fill.critical { background: linear-gradient(90deg, #dc2626, #f87171); }
+
+  /* Minimap */
+  .minimap-container {
+    background: #0e0e16;
+    border-radius: 8px;
+    padding: 4px;
+    border: 1px solid #252540;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    max-height: 140px;
+    overflow: hidden;
+  }
+
+  .minimap-container img { max-width: 100%; max-height: 132px; image-rendering: pixelated; }
+
+  /* Thought bubble */
+  .thought-bubble {
+    background: linear-gradient(135deg, #141420, #181830);
+    border: 1px solid #ffb67033;
+    border-radius: 12px;
+    padding: 10px 14px;
+    position: relative;
+    animation: pulseGlow 4s ease-in-out infinite;
+  }
+
+  .thought-bubble #chat-message { font-size: 15px; line-height: 1.5; color: #d0d0d0; }
+
+  .emotion-tag {
+    display: inline-block;
+    font-family: 'SartoshiScript', cursive;
+    font-size: 18px;
+    color: #ffb670;
+    background: #ffb67018;
+    padding: 1px 10px;
+    border-radius: 8px;
+    margin-bottom: 4px;
+    border: 1px solid #ffb67022;
+  }
+
+  /* Stream log */
+  .log-section { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+
+  .log-entries {
+    flex: 1;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column-reverse;
+    font-size: 13px;
+    line-height: 1.4;
+    gap: 1px;
+  }
+
+  .log-entry {
+    padding: 2px 6px;
+    border-radius: 4px;
+    background: #ffffff03;
+    animation: slideIn 0.3s ease;
+  }
+  .log-entry:nth-child(odd) { background: #ffffff05; }
+  .log-entry .emotion { color: #ffb67088; font-size: 12px; font-style: italic; }
+  .log-entry .msg { color: #999; }
+
+  /* RIGHT: Webcam */
+  .webcam-panel {
+    background: #ffb670;
+    position: relative;
+  }
+
+  .webcam-panel iframe { width: 100%; height: 100%; border: none; }
+
+  /* BOTTOM AREA */
+  .bottom-area {
+    height: 388px;
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    border-top: 2px solid #ffb670;
+    position: relative;
+  }
+
+  .bottom-area::before {
+    content: '';
+    position: absolute;
+    top: -4px;
+    left: 0; right: 0;
+    height: 4px;
+    background: linear-gradient(90deg, transparent, #ffb67044, transparent);
+  }
+
+  .chart-panel {
+    background: #0a0a0f;
+    border-right: 1px solid #1a1a2e;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .chart-panel iframe { width: 100%; height: 100%; border: none; }
+
+  .chart-label {
+    position: absolute;
+    top: 8px;
+    left: 10px;
+    font-family: 'SartoshiScript', cursive;
+    font-size: 18px;
+    color: #ffb670;
+    z-index: 10;
+    background: rgba(10,10,15,0.85);
+    padding: 2px 10px;
+    border-radius: 6px;
+    border: 1px solid #ffb67022;
+    backdrop-filter: blur(4px);
+  }
+
+  /* Social feeds */
+  .feed-panel {
+    background: linear-gradient(180deg, #0e0e16, #101018);
+    padding: 10px 14px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    border-left: 1px solid #1a1a2e;
+  }
+
+  .feed-section {
+    flex: 1;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+
+  .feed-section:first-child {
+    border-bottom: 1px solid #1a1a2e;
+    padding-bottom: 8px;
+    margin-bottom: 8px;
+  }
+
+  .feed-section h3 {
+    font-family: 'SartoshiScript', cursive;
+    font-size: 22px;
+    color: #ffb670;
+    margin-bottom: 6px;
+    flex-shrink: 0;
+    text-shadow: 0 0 10px #ffb67022;
+  }
+
+  .feed-entries {
+    flex: 1;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    font-size: 14px;
+    line-height: 1.4;
+    gap: 4px;
+  }
+
+  .feed-entry {
+    padding: 4px 8px;
+    color: #ccc;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    border-radius: 4px;
+    background: #ffffff06;
+    flex-shrink: 0;
+  }
+
+  .feed-entry .username { color: #ffb670; font-weight: 600; margin-right: 6px; }
+  .feed-entry .text { color: #ddd; }
+
+  /* Model selector */
+  .model-tag {
+    font-size: 18px;
+    background: #ffb67033;
+    color: #ffb670;
+    padding: 2px 8px;
+    border-radius: 10px;
+  }
+</style>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+</head>
+<body>
+
+<div class="title-bar">
+  <div class="title"><span class="live-dot"></span>mfergpt plays pokemon</div>
+  <div class="title-stats">
+    <span>step <span class="val" id="step-count">0</span></span>
+    <span>model <span class="val" id="model-name">-</span></span>
+    <span>cost <span class="val" id="total-cost">$0.00</span></span>
+  </div>
+</div>
+
+<div class="main-area">
+  <!-- LEFT: 3D Webcam -->
+  <div class="webcam-panel">
+    <iframe src="/webcam" id="webcam-frame"></iframe>
+  </div>
+
+  <!-- CENTER: Stats -->
+  <div class="stats-panel" id="stats-panel">
+    <div class="stat-section">
+      <div class="trainer-stats">
+        <div class="stat-box">
+          <div class="label">Money</div>
+          <div class="value" id="money">$0</div>
+        </div>
+        <div class="stat-box">
+          <div class="label">Badges</div>
+          <div class="value" id="badge-count">0/8</div>
+        </div>
+        <div class="stat-box">
+          <div class="label">Location</div>
+          <div class="value" id="location" style="font-size:11px;">-</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="stat-section">
+      <div class="badges-row" id="badges-row"></div>
+    </div>
+
+    <div class="stat-section">
+      <h3>team</h3>
+      <div class="team-grid" id="team-grid">
+        <div class="pkmn-card"><div class="pkmn-sub">waiting...</div></div>
+      </div>
+    </div>
+
+    <div class="stat-section">
+      <div class="minimap-container" id="minimap-container">
+        <img id="minimap-img" src="" alt="minimap" style="display:none;">
+      </div>
+    </div>
+
+    <div class="thought-bubble" id="thought-bubble">
+      <div class="emotion-tag" id="emotion-tag">thinking</div>
+      <div id="chat-message">waiting for first move...</div>
+    </div>
+
+    <div class="log-section">
+      <h3 style="font-family:'SartoshiScript',cursive;font-size:18px;color:#ffb670;margin-bottom:4px;text-shadow:0 0 10px #ffb67022;">stream log</h3>
+      <div class="log-entries" id="log-entries"></div>
+    </div>
+  </div>
+
+  <!-- RIGHT: Emulator -->
+  <div class="emulator-panel">
+    <div class="emulator-placeholder">
+      <span>🎮</span>
+      OBS: capture mGBA window here
+    </div>
+  </div>
+</div>
+
+<div class="bottom-area">
+  <div class="chart-panel">
+    <div class="chart-label">$mfergpt</div>
+    <iframe src="https://www.geckoterminal.com/base/pools/0x23ce6e13e06fc19bb5b5948334019fc75b7d0773eddf21a72008ac0ab8753d61?embed=1&info=0&swaps=0&grayscale=0&light_chart=0" loading="lazy"></iframe>
+  </div>
+  <div class="chart-panel">
+    <div class="chart-label">$mfer</div>
+    <iframe src="https://www.geckoterminal.com/base/pools/0xb08a99ab559e5456907278727a3b0d968c0a313b?embed=1&info=0&swaps=0&grayscale=0&light_chart=0" loading="lazy"></iframe>
+  </div>
+  <div class="feed-panel">
+    <div class="feed-section">
+      <h3>🐦 mentions</h3>
+      <div class="feed-entries" id="mentions-feed"></div>
+    </div>
+    <div class="feed-section">
+      <h3>💬 twitch chat</h3>
+      <div class="feed-entries" id="twitch-feed"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const WS_HOST = window.location.hostname || 'localhost';
+const WS_PORT = 9885;
+const MINIMAP_URL = `http://${WS_HOST}:${WS_PORT}/minimapSnapshot`;
+const MODEL_URL = `http://${WS_HOST}:${WS_PORT}/api/model`;
+
+const BADGE_NAMES = ['BOULDER','CASCADE','THUNDER','RAINBOW','SOUL','MARSH','VOLCANO','EARTH'];
+const BADGE_SHORT = ['B','C','T','R','S','M','V','E'];
+
+let ws = null;
+let logs = [];
+const MAX_LOGS = 50;
+
+const badgesRow = document.getElementById('badges-row');
+badgesRow.innerHTML = BADGE_NAMES.map((name, i) => 
+  `<div class="badge-dot unearned" id="badge-${name}" title="${name}">${BADGE_SHORT[i]}</div>`
+).join('');
+
+function connect() {
+  ws = new WebSocket(`ws://${WS_HOST}:${WS_PORT}`);
+  ws.onmessage = (event) => {
+    try { handleMessage(JSON.parse(event.data)); } catch (e) {}
+  };
+  ws.onclose = () => setTimeout(connect, 3000);
+  ws.onerror = () => {};
+}
+
+function handleMessage(msg) {
+  const type = msg.type;
+  const p = msg.payload || msg;
+  if (type === 'full_state' || type === 'state_update') updateStats(p);
+  if (type === 'action_start') updateAction(p);
+}
+
+function updateStats(data) {
+  const trainer = data.current_trainer_data;
+  if (trainer) {
+    document.getElementById('money').textContent = `$${(trainer.money || 0).toLocaleString()}`;
+    const badges = trainer.badges || {};
+    const earned = Object.keys(badges).filter(k => badges[k]);
+    document.getElementById('badge-count').textContent = `${earned.length}/8`;
+    
+    const pos = trainer.position || {};
+    const mapName = (pos.map_name || '-').replace(/_/g, ' ');
+    document.getElementById('location').textContent = mapName;
+    
+    BADGE_NAMES.forEach(name => {
+      const el = document.getElementById(`badge-${name}`);
+      if (el) el.className = badges[name] ? 'badge-dot earned' : 'badge-dot unearned';
+    });
+  }
+  
+  const team = data.current_pokemon_data || [];
+  const teamGrid = document.getElementById('team-grid');
+  if (team.length > 0) {
+    teamGrid.innerHTML = team.map(p => {
+      const maxHp = p.max_hp || 1;
+      const curHp = p.current_hp || 0;
+      const pct = Math.max(0, Math.min(100, (curHp / maxHp) * 100));
+      const hpClass = pct <= 20 ? 'critical' : pct <= 50 ? 'low' : '';
+      return `
+        <div class="pkmn-card">
+          <div class="pkmn-name">${p.nickname || p.species_name || '?'}</div>
+          <div class="pkmn-sub">${p.species_name || '?'} Lv${p.level || 0}</div>
+          <div class="hp-bar"><div class="hp-fill ${hpClass}" style="width:${pct}%"></div></div>
+          <div class="pkmn-sub">${curHp}/${maxHp} HP</div>
+        </div>`;
+    }).join('');
+  }
+  
+  document.getElementById('step-count').textContent = data.steps || 0;
+  if (data.total_tokens_accumulated) {
+    document.getElementById('total-cost').textContent = `~$${(data.total_tokens_accumulated * 0.000002).toFixed(2)}`;
+  }
+}
+
+function updateAction(data) {
+  if (data.chat_message) document.getElementById('chat-message').textContent = data.chat_message;
+  if (data.avatar_emotion) document.getElementById('emotion-tag').textContent = data.avatar_emotion;
+  
+  if (data.chat_message) {
+    logs.unshift({ msg: data.chat_message, emotion: data.avatar_emotion || '' });
+    if (logs.length > MAX_LOGS) logs.pop();
+    renderLogs();
+  }
+}
+
+function renderLogs() {
+  document.getElementById('log-entries').innerHTML = logs.map(l => `
+    <div class="log-entry">
+      <span class="emotion">${l.emotion}</span>
+      <span class="msg">${escapeHtml(l.msg)}</span>
+    </div>
+  `).join('');
+}
+
+function escapeHtml(s) {
+  return s ? s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;') : '';
+}
+
+async function pollMinimap() {
+  try {
+    const res = await fetch(MINIMAP_URL);
+    if (!res.ok) return;
+    const data = await res.json();
+    if (data.image_base64) {
+      const img = document.getElementById('minimap-img');
+      img.src = `data:image/png;base64,${data.image_base64}`;
+      img.style.display = 'block';
+    }
+  } catch (e) {}
+}
+
+async function pollModel() {
+  try {
+    const res = await fetch(MODEL_URL);
+    const data = await res.json();
+    document.getElementById('model-name').textContent = data.model || '-';
+  } catch (e) {}
+}
+
+connect();
+setInterval(pollMinimap, 2000);
+setInterval(pollModel, 10000);
+pollMinimap();
+pollModel();
+
+// Mentions feed
+const mentionsFeed = document.getElementById('mentions-feed');
+async function pollMentions() {
+  try {
+    const res = await fetch(`http://${WS_HOST}:9886/api/mentions`);
+    if (!res.ok) return;
+    const mentions = await res.json();
+    mentionsFeed.innerHTML = mentions.reverse().map(m =>
+      `<div class="feed-entry"><span class="username">@${m.username}</span> <span class="text">${m.text}</span></div>`
+    ).join('');
+    mentionsFeed.scrollTop = mentionsFeed.scrollHeight;
+  } catch(e) {}
+}
+setInterval(pollMentions, 15000);
+pollMentions();
+
+// Twitch chat
+const twitchFeed = document.getElementById('twitch-feed');
+async function pollTwitch() {
+  try {
+    const res = await fetch(`http://${WS_HOST}:9886/api/twitch-chat`);
+    if (!res.ok) return;
+    const msgs = await res.json();
+    twitchFeed.innerHTML = msgs.map(m =>
+      `<div class="feed-entry"><span class="username">${m.username}</span> <span class="text">${m.text}</span></div>`
+    ).join('');
+  } catch(e) {}
+}
+setInterval(pollTwitch, 3000);
+pollTwitch();
+</script>
+</body>
+</html>

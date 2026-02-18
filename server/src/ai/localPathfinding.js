@@ -56,6 +56,7 @@ import json, sys, importlib.util
 
 spec = importlib.util.spec_from_file_location("pf", ${JSON.stringify(PYTHON_SCRIPT)})
 pf = importlib.util.module_from_spec(spec)
+sys.modules["pf"] = pf
 spec.loader.exec_module(pf)
 
 keys, meta = pf.plan_path(

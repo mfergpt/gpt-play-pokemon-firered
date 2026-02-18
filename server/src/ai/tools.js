@@ -645,6 +645,7 @@ async function handleToolCall(toolCall, gameDataJson) {
                 step_details: args.step_details || "",
                 timestamp: new Date().toISOString(),
                 step: state.counters?.currentStep ?? 0,
+                phase: "playing",
             };
             const streamerDir = path.join(config.dataDir, "..");
             await fs.writeFile(

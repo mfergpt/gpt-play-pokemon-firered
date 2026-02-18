@@ -14,6 +14,18 @@ const { updateProgressSteps, updateLastVisitedMaps } = require('./progressTracke
 const { openai } = require('./openaiClient');
 const { anthropicResponsesCreate } = require('./anthropicAdapter');
 
+// Update streamer phase (shown in overlay UI)
+function updateStreamerPhase(phase) {
+    try {
+        const stateFile = path.join(config.dataDir, '..', 'streamer_state.json');
+        let current = {};
+        try { current = JSON.parse(fsSync.readFileSync(stateFile, 'utf8')); } catch {}
+        current.phase = phase;
+        current.phase_timestamp = new Date().toISOString();
+        fsSync.writeFileSync(stateFile, JSON.stringify(current, null, 2), 'utf8');
+    } catch {}
+}
+
 // Route API calls to OpenAI or Anthropic based on config
 function createStream(options) {
     if (config.useAnthropic) {
@@ -279,7 +291,16 @@ async function gameLoop() {
             const stepsSinceLastSummary = state.counters.currentStep - state.counters.lastSummaryStep;
             const shouldSummarizeBasedOnSteps = stepsSinceLastSummary >= config.history.limitAssistantMessagesForSummary;
             const shouldSummarizeBasedOnTokens = state.lastTotalTokens >= config.openai.tokenLimit;
-            const shouldSummarize = shouldSummarizeBasedOnSteps || shouldSummarizeBasedOnTokens; // <<< Updated condition
+
+            // Proactive history size check: if history JSON exceeds ~2MB, force summary
+            // This prevents the API call from hanging on oversized prompts
+            const historyJsonSize = JSON.stringify(state.history).length;
+            const shouldSummarizeBasedOnSize = historyJsonSize > 1_000_000;
+            if (shouldSummarizeBasedOnSize) {
+                console.log(`>>> PROACTIVE: history JSON is ${(historyJsonSize / 1_000_000).toFixed(1)}MB — forcing summary to prevent hang <<<`);
+            }
+
+            const shouldSummarize = shouldSummarizeBasedOnSteps || shouldSummarizeBasedOnTokens || shouldSummarizeBasedOnSize; // <<< Updated condition
 
 
             // Check if the last history item is an EmptyActionError
@@ -298,6 +319,7 @@ async function gameLoop() {
 
             if (shouldSummarize) {
                 setIsThinking(true);
+                updateStreamerPhase('summarizing');
                 console.log(`Triggering summary. Reason: ${shouldSummarizeBasedOnSteps ? 'Steps limit reached' : ''}${shouldSummarizeBasedOnSteps && shouldSummarizeBasedOnTokens ? ' and ' : ''}${shouldSummarizeBasedOnTokens ? 'Token limit reached' : ''}.`); // Add logging
                 const summaryPrompt = await fs.readFile(path.join(config.promptsDir, "summary.txt"), "utf8");
 
@@ -693,13 +715,13 @@ async function gameLoop() {
 
                 console.log(`Adding ${lastTwoSummaries.length} last state.summaries to history.`);
 
-                // // Add the last 2 state.summaries to history
-                // lastTwoSummaries.forEach(summary => {
-                //     state.history.push({
-                //         "role": "assistant",
-                //         "content": [{ "type": "output_text", "text": summary.text }]
-                //     });
-                // });
+                // Add the last 2 summaries to history for context continuity
+                lastTwoSummaries.forEach(summary => {
+                    state.history.push({
+                        "role": "user",
+                        "content": [{ "type": "input_text", "text": "<previous_summary>" + summary.text + "</previous_summary>" }]
+                    });
+                });
 
                 if (finalResponse?.output) {
                     finalResponse.output.forEach(item => {
@@ -722,6 +744,34 @@ async function gameLoop() {
                 // REMOVED: selfCriticismDone = false;
                 // Save the new history and state.counters
                 await savePersistentState();
+
+                // Sync latest summary to mferGPT workspace for heartbeat access
+                try {
+                    const workspacePath = "/Users/mfergpt/.openclaw/workspace/memory/pokemon-live.md";
+                    const latestSummary = state.summaries[state.summaries.length - 1];
+                    const team = state.gameData?.party || [];
+                    const badges = state.gameData?.badges || [];
+                    const location = state.gameData?.location || "unknown";
+                    const digest = [
+                        `# Pokemon FireRed Live Session`,
+                        `> Auto-synced from game server at ${new Date().toISOString()}`,
+                        `> Step: ${state.counters.currentStep} | Summaries: ${state.allSummaries.length}`,
+                        ``,
+                        `## Current State`,
+                        `- **Location:** ${typeof location === 'object' ? JSON.stringify(location) : location}`,
+                        `- **Badges:** ${Array.isArray(badges) ? badges.length : badges}`,
+                        `- **Team:** ${Array.isArray(team) ? team.map(p => `${p.nickname || p.species} Lv${p.level}`).join(', ') : 'unknown'}`,
+                        ``,
+                        `## Latest Summary`,
+                        latestSummary ? latestSummary.text.slice(0, 4000) : '(no summary yet)',
+                        ``,
+                    ].join('\n');
+                    await fs.writeFile(workspacePath, digest, 'utf8');
+                    console.log("Synced pokemon-live.md to workspace.");
+                } catch (syncErr) {
+                    console.warn("Failed to sync pokemon-live.md:", syncErr.message);
+                }
+
                 continue; // Skip the rest of the loop for summary turn
 
             } else if (!state.skipNextUserMessage) { // <<< Check the flag BEFORE creating newUserMessage
@@ -771,6 +821,7 @@ async function gameLoop() {
             const tools = defineTools();
 
             // 5. Call the OpenAI API with streaming
+            updateStreamerPhase('thinking');
             console.log("\n--- Sending to OpenAI ---");
             // console.log("API Input (history size):", apiInput.length); // Debug
 
@@ -1111,6 +1162,20 @@ async function gameLoop() {
         } catch (error) {
             console.error("\n--- ERROR IN MAIN LOOP ---");
             console.error(error);
+
+            // Auto-recovery: if prompt is too long, truncate history and force summary
+            const errMsg = error?.error?.error?.message || error?.message || '';
+            if (errMsg.includes('prompt is too long') || errMsg.includes('too many tokens')) {
+                console.log(">>> PROMPT TOO LONG — auto-truncating history and forcing summary <<<");
+                state.history = state.history.slice(-3).filter(h => h.role !== 'tool' || state.history.some(prev => prev.role === 'assistant' && JSON.stringify(prev).includes(h.call_id)));
+                // Simpler: just clear history entirely, summaries have all context
+                state.history = [];
+                state.counters.lastSummaryStep = 0; // Force summary on next step
+                state.lastTotalTokens = 0;
+                await savePersistentState();
+                console.log(">>> History cleared, summary will trigger next step <<<");
+            }
+
             console.error("Pausing for 10 seconds before retrying...");
             const downDuration = Date.now() - loopStartTime;
             recordDownTime(downDuration);
