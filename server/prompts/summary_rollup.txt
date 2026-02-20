@@ -8,9 +8,10 @@ Your task:
 - The goal is to make the last summary more complete about PAST events, while keeping its current state, current objectives, and next steps EXACTLY as they are.
 
 Rules:
-- DO NOT change the "current state" or "next steps" sections of the last summary. Those reflect the latest game state and must be preserved as-is.
+- DO NOT change the "current state", "next steps", or "Navigation Continuity" sections of the last summary. Those reflect the latest game state and spatial reasoning and must be preserved as-is.
 - DO NOT replace next steps / objectives with outdated ones from older summaries.
 - DO enrich the historical timeline: add any past events, milestones, step numbers, or details that the last summary is missing but that appear in earlier summaries.
+- PRESERVE all "Navigation Continuity" details (current destination, route, failed attempts, spatial lessons) from the latest summary — this prevents the AI from repeating navigation mistakes after rollup.
 - Treat earlier summaries as canonical for historical facts. If there is a conflict about a PAST event, prefer the earlier summary.
 - Do NOT invent facts. If something is not present in any summary, mark it UNKNOWN or omit it.
 - Do NOT contradict confirmed facts.

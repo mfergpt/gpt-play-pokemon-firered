@@ -538,6 +538,21 @@ function defineTools() {
         type: z.literal("restart_console").describe("Action to reboot the Game Boy console back to the title screen. BE SURE TO HAVE SAVED THE GAME BEFORE USING THIS TOOL."),
     });
 
+    const setNavigationPlanSchema = z.object({
+        type: z.literal("set_navigation_plan").describe("Set a persistent navigation plan. This plan will be visible to you EVERY turn until you clear it. Use this when you decide to travel somewhere that takes multiple steps."),
+        destination_x: z.number().describe("X coordinate of the destination."),
+        destination_y: z.number().describe("Y coordinate of the destination."),
+        destination_map_id: z.string().describe("Map ID of the destination."),
+        destination_map_name: z.string().describe("Human-readable map name of the destination."),
+        reason: z.string().describe("Why you're going there (e.g., 'Heal at Pokemon Center before Brock fight', 'Reach Route 3 for grinding')."),
+        route_notes: z.string().describe("Key navigation notes for the route (e.g., 'Must go through x=22 gap at y=20 to bypass wall', 'Avoid NPC at (42,20)')."),
+    });
+
+    const clearNavigationPlanSchema = z.object({
+        type: z.literal("clear_navigation_plan").describe("Clear the current navigation plan. Use when you've arrived at your destination, or when you need to change plans."),
+        reason: z.string().describe("Why you're clearing the plan (e.g., 'Arrived at Pokemon Center', 'Changed strategy - need to grind first')."),
+    });
+
     // Union of possible action schemas
     const actionUnionSchema = z.union([
         keyPressActionSchema,
@@ -548,6 +563,8 @@ function defineTools() {
         deleteMarkerActionSchema,
         pathfindingActionSchema,
         restartConsoleActionSchema,
+        setNavigationPlanSchema,
+        clearNavigationPlanSchema,
     ]);
 
     // Main schema for the execute_action tool
@@ -993,6 +1010,33 @@ async function handleToolCall(toolCall, gameDataJson) {
                             overallSuccess = false;
                         }
                         break;
+
+                    case "set_navigation_plan":
+                        state.navigationPlan = {
+                            destination: {
+                                x: individualAction.destination_x,
+                                y: individualAction.destination_y,
+                                map_id: individualAction.destination_map_id,
+                                map_name: individualAction.destination_map_name,
+                            },
+                            reason: individualAction.reason,
+                            route_notes: individualAction.route_notes || "",
+                            steps_taken: 0,
+                            created_at_step: state.counters.currentStep,
+                        };
+                        actionResult.message = `Navigation plan set: Going to (${individualAction.destination_x}, ${individualAction.destination_y}) on ${individualAction.destination_map_name} — ${individualAction.reason}`;
+                        actionResult.success = true;
+                        console.log(`Nav plan set: ${actionResult.message}`);
+                        break;
+
+                    case "clear_navigation_plan":
+                        const oldPlan = state.navigationPlan;
+                        state.navigationPlan = null;
+                        actionResult.message = `Navigation plan cleared. ${individualAction.reason}${oldPlan ? ` (Was: ${oldPlan.reason})` : ""}`;
+                        actionResult.success = true;
+                        console.log(`Nav plan cleared: ${individualAction.reason}`);
+                        break;
+
                     default:
                         actionResult.success = false;
                         actionResult.message = `Error: Unknown action type '${individualAction.type}'.`;

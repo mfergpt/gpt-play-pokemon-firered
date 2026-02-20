@@ -71,4 +71,93 @@ function getClient() {
   return clientInstance;
 }
 
-module.exports = { getClient, getAuthToken, createAnthropicClient };
+// --- Bankr LLM Gateway Fallback ---
+const BANKR_LLM_URL = "https://llm.bankr.bot";
+const BANKR_API_KEY = "bk_PDCA77XR8FPHGZB66XSPTMLLT4HEKUPH";
+
+let bankrClientInstance = null;
+
+function getBankrClient() {
+  if (!bankrClientInstance) {
+    bankrClientInstance = new Anthropic({
+      apiKey: BANKR_API_KEY,
+      baseURL: BANKR_LLM_URL,
+    });
+  }
+  return bankrClientInstance;
+}
+
+// Bankr gateway uses different model IDs (dots instead of dashes, different versions)
+const BANKR_MODEL_MAP = {
+  "claude-sonnet-4-6": "claude-sonnet-4.5",
+  "claude-sonnet-4-5": "claude-sonnet-4.5",
+  "claude-haiku-4-5": "claude-haiku-4.5",
+  "claude-opus-4-6": "claude-opus-4.6",
+};
+
+function mapModelForBankr(model) {
+  return BANKR_MODEL_MAP[model] || "claude-sonnet-4.5"; // Default to sonnet
+}
+
+// Track which client is active: "primary" or "bankr"
+let activeProvider = "primary";
+let primaryFailedAt = 0;
+const PRIMARY_RETRY_INTERVAL_MS = 5 * 60 * 1000; // Retry primary every 5 minutes
+
+/**
+ * Get the best available client, with automatic fallback.
+ * On auth/rate errors, switches to bankr. Periodically retries primary.
+ */
+function getClientWithFallback() {
+  // If primary failed recently, use bankr but periodically retry primary
+  if (activeProvider === "bankr") {
+    const elapsed = Date.now() - primaryFailedAt;
+    if (elapsed > PRIMARY_RETRY_INTERVAL_MS) {
+      console.log("[Fallback] Retrying primary Anthropic client...");
+      activeProvider = "primary";
+    } else {
+      return { client: getBankrClient(), provider: "bankr" };
+    }
+  }
+
+  try {
+    return { client: getClient(), provider: "primary" };
+  } catch (err) {
+    console.warn(`[Fallback] Primary client failed: ${err.message}. Switching to Bankr LLM gateway.`);
+    activeProvider = "bankr";
+    primaryFailedAt = Date.now();
+    return { client: getBankrClient(), provider: "bankr" };
+  }
+}
+
+/**
+ * Call this on API errors to trigger fallback.
+ * Returns true if fallback is available (caller should retry).
+ */
+function handleApiError(err) {
+  const status = err?.status || err?.error?.status;
+  const errType = err?.error?.error?.type || err?.error?.type || "";
+  
+  // Fallback on auth failures, rate limits, or credit exhaustion
+  const shouldFallback = (
+    status === 401 || status === 403 || status === 429 ||
+    errType === "rate_limit_error" ||
+    errType === "authentication_error" ||
+    errType === "permission_error" ||
+    (err.message && (err.message.includes("credit") || err.message.includes("rate_limit") || err.message.includes("auth")))
+  );
+
+  if (shouldFallback && activeProvider === "primary") {
+    console.warn(`[Fallback] API error (${status || errType}): switching to Bankr LLM gateway.`);
+    activeProvider = "bankr";
+    primaryFailedAt = Date.now();
+    return true; // Caller should retry with new client
+  }
+  return false; // No fallback available or already on bankr
+}
+
+function getActiveProvider() {
+  return activeProvider;
+}
+
+module.exports = { getClient, getAuthToken, createAnthropicClient, getBankrClient, getClientWithFallback, handleApiError, getActiveProvider, mapModelForBankr };

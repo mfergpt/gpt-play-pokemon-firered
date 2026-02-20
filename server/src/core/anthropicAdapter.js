@@ -4,7 +4,7 @@
  * Returns an async iterable of OpenAI-style events so the game loop needs minimal changes.
  */
 
-const { getClient, getAuthToken } = require("./anthropicClient");
+const { getClient, getAuthToken, getClientWithFallback, handleApiError, getActiveProvider, mapModelForBankr } = require("./anthropicClient");
 
 /**
  * Convert OpenAI-style input messages to Anthropic format.
@@ -204,7 +204,10 @@ function getThinkingBudget(reasoningEffort) {
  * Returns an async iterable of OpenAI-compatible events.
  */
 async function* anthropicResponsesCreate(options) {
-  const client = getClient();
+  const { client, provider } = getClientWithFallback();
+  if (provider === "bankr") {
+    console.log("[Adapter] Using Bankr LLM gateway (fallback mode)");
+  }
   const model = mapModel(options.model);
   const { system, messages } = convertMessages(options.input);
   const tools = convertTools(options.tools);
@@ -224,11 +227,10 @@ async function* anthropicResponsesCreate(options) {
           if (block.text) chars += block.text.length;
           else if (block.content) chars += block.content.length;
           else if (block.input) chars += JSON.stringify(block.input).length;
-          // Base64 images are ~1 token per 1.5 chars, not per 4
+          // Anthropic bills images at fixed token rates based on resolution
+          // GBA screenshots are small but still cost ~1600 tokens minimum each
           if (block.type === 'image' || block.image_url || block.type === 'input_image') {
-            const imgData = block.image_url || block.source?.data || '';
-            const imgLen = typeof imgData === 'string' ? imgData.length : JSON.stringify(imgData).length;
-            chars += Math.ceil(imgLen * 2); // images cost way more tokens than text
+            chars += 6400; // ~1600 tokens * 4 chars/token
           }
         }
       }
@@ -237,6 +239,7 @@ async function* anthropicResponsesCreate(options) {
   };
 
   let estimated = estimateTokens(cleanedMessages);
+  console.log(`[Anthropic] Token estimate: ${estimated} tokens from ${cleanedMessages.length} messages (system: ${(system||'').length} chars)`);
   const TOKEN_LIMIT = 150000;
   while (estimated > TOKEN_LIMIT && cleanedMessages.length > 4) {
     // Remove from the front (oldest), but keep the very first message for context
@@ -267,8 +270,12 @@ async function* anthropicResponsesCreate(options) {
   cleanedMessages = sanitize(cleanedMessages);
   const sanitizedSystem = typeof system === 'string' ? sanitize(system) : system;
 
+  // Remap model for bankr gateway if needed
+  const effectiveModel = provider === "bankr" ? mapModelForBankr(model) : model;
+  console.log(`[Adapter] model=${model} effectiveModel=${effectiveModel} provider=${provider}`);
+
   const params = {
-    model,
+    model: effectiveModel,
     system: sanitizedSystem || undefined,
     messages: cleanedMessages,
     max_tokens: options.max_output_tokens || 8192,
@@ -307,7 +314,23 @@ async function* anthropicResponsesCreate(options) {
   const outputItems = [];
 
   try {
-    const stream = client.messages.stream(params);
+    let activeClient = client;
+    let stream;
+    try {
+      stream = activeClient.messages.stream(params);
+    } catch (initErr) {
+      if (handleApiError(initErr)) {
+        console.log("[Adapter] Retrying with Bankr LLM gateway...");
+        const fallback = getClientWithFallback();
+        activeClient = fallback.client;
+        if (fallback.provider === "bankr") {
+          params.model = mapModelForBankr(model);
+        }
+        stream = activeClient.messages.stream(params);
+      } else {
+        throw initErr;
+      }
+    }
 
     for await (const event of stream) {
       switch (event.type) {
@@ -440,7 +463,9 @@ async function* anthropicResponsesCreate(options) {
       }
     }
   } catch (err) {
-    console.error("[Anthropic Adapter] Stream error:", err.message);
+    // Flag fallback for next attempt — the game loop will retry naturally
+    handleApiError(err);
+    console.error("[Anthropic Adapter] Stream error:", err.message, `(provider: ${getActiveProvider()})`);
     throw err;
   }
 }
@@ -479,7 +504,7 @@ function ensureAlternating(messages) {
 function mapModel(openaiModel) {
   const mapping = {
     "gpt-5-nano": "claude-haiku-4-5",
-    "gpt-5-mini": "claude-sonnet-4-5",
+    "gpt-5-mini": "claude-sonnet-4-6",
     "gpt-5.2": "claude-opus-4-6",
     "gpt-5.2-codex": "claude-opus-4-6",
   };

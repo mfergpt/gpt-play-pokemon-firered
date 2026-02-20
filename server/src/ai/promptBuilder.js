@@ -92,6 +92,36 @@ Notes:
 \n`;
 }
 
+function formatNavigationPlan(plan, currentPos) {
+  if (!plan) return "<navigation_plan>No active navigation plan.</navigation_plan>\n";
+  
+  const dest = plan.destination;
+  const sameMap = currentPos?.map_id === dest.map_id;
+  const dx = dest.x - (currentPos?.x ?? 0);
+  const dy = dest.y - (currentPos?.y ?? 0);
+  const distance = Math.abs(dx) + Math.abs(dy);
+  
+  let dirHint = "";
+  if (sameMap && distance > 0) {
+    const parts = [];
+    if (dy < 0) parts.push(`${Math.abs(dy)} tiles NORTH`);
+    if (dy > 0) parts.push(`${Math.abs(dy)} tiles SOUTH`);
+    if (dx < 0) parts.push(`${Math.abs(dx)} tiles WEST`);
+    if (dx > 0) parts.push(`${Math.abs(dx)} tiles EAST`);
+    dirHint = `\n  <relative_direction>${parts.join(", ")} (Manhattan distance: ${distance})</relative_direction>`;
+  } else if (!sameMap) {
+    dirHint = `\n  <relative_direction>Different map — navigate to map exit first</relative_direction>`;
+  }
+  
+  return `<navigation_plan active="true" created_step="${plan.created_at_step}">
+  <destination map="${escapeXml(dest.map_name)}" map_id="${escapeXml(dest.map_id)}" x="${dest.x}" y="${dest.y}" />
+  <reason>${escapeXml(plan.reason)}</reason>
+  <route_notes>${escapeXml(plan.route_notes)}</route_notes>${dirHint}
+  <current_facing>${escapeXml(currentPos?.facing || "unknown")}</current_facing>
+  <steps_since_plan>${plan.steps_taken}</steps_since_plan>
+</navigation_plan>\n`;
+}
+
 function formatObjectives(objectives) {
   if (!objectives || typeof objectives !== "object") return "<objectives />\n";
 
@@ -452,6 +482,8 @@ async function buildUserInputText(gameDataJson) {
 </player_stats>
 
 ${formatBattleState(gameDataJson?.battle_data)}
+
+${formatNavigationPlan(state.navigationPlan, pos)}
 
 <objectives_section>
 ${formatObjectives(state.objectives)}

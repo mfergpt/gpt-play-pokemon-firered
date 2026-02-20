@@ -36,7 +36,7 @@ const config = {
     modelPathFinding: process.env.OPENAI_MODEL_PATHFINDING || "gpt-5.2",
     reasoningSummary: process.env.OPENAI_REASONING_SUMMARY || "auto",
 
-    tokenLimit: Number(process.env.OPENAI_TOKEN_LIMIT || 250000),
+    tokenLimit: Number(process.env.OPENAI_TOKEN_LIMIT || 150000),
     timeout: Number(process.env.OPENAI_TIMEOUT_MS || 15 * 60 * 1000),
     service_tier: process.env.OPENAI_SERVICE_TIER || "priority",
     service_tierSelfCriticism:
@@ -130,20 +130,23 @@ const config = {
     get lastUserInputTextSaveFile() {
       return path.join(ROOT_DIR, config.dataDir, "last_userInputText_prompt.txt");
     },
+    get navigationPlanFile() {
+      return path.join(ROOT_DIR, config.dataDir, "navigation_plan.json");
+    },
   },
 
   // --- History Processing Configuration ---
   history: {
     keepLastNToolPartialResults: 20,
-    keepLastNToolFullResults: 6,
+    keepLastNToolFullResults: 2,
     keepLastNUserMessagesWithMinimap: 1,
-    keepLastNUserMessagesWithMemory: 1,
+    keepLastNUserMessagesWithMemory: 5,
     keepLastNUserMessagesWithViewMap: 5,
-    keepLastNUserMessagesWithImages: 10,
+    keepLastNUserMessagesWithImages: 3,
     keepLastNUserMessagesWithDetailedData: 4,
     keepLastNUserMessagesWithPokedex: 1,
     limitAssistantMessagesForSelfCriticism: 55,
-    limitAssistantMessagesForSummary: 60,
+    limitAssistantMessagesForSummary: 30,
   },
 
   // --- Tool Configuration ---
@@ -152,7 +155,7 @@ const config = {
   },
 
   // --- Loop Configuration ---
-  loopDelayMs: 0,
+  loopDelayMs: 10000,
 };
 
 module.exports = { config };

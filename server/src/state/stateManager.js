@@ -25,6 +25,7 @@ const state = {
   gameDataJsonRef: null,
   lastTotalTokens: 0,
   isThinking: false,
+  navigationPlan: null, // { destination: {x, y, map_id, map_name}, reason: string, route_notes: string, steps_taken: number, created_at_step: number }
 };
 
 let broadcast = null;
@@ -70,6 +71,75 @@ async function loadPersistentState() {
     const historyData = await fs.readFile(config.paths.historySaveFile, "utf-8");
     state.history = JSON.parse(historyData);
     console.log("History loaded. Size:", state.history.length);
+
+    // --- Crash Recovery: clean up and compact history on startup ---
+    // 1. Remove empty/broken entries at the end (crash artifacts from incomplete API responses)
+    let trimmed = 0;
+    while (state.history.length > 0) {
+      const last = state.history[state.history.length - 1];
+      const content = last.content;
+      const isEmpty = (
+        (!content) ||
+        (typeof content === 'string' && content.trim() === '') ||
+        (Array.isArray(content) && content.length === 0) ||
+        // Empty assistant output_text entries from crashed streams
+        (!last.role && Array.isArray(content) && content.every(c => typeof c === 'object' && c.type === 'output_text' && (!c.text || c.text.trim() === '')))
+      );
+      if (isEmpty) {
+        state.history.pop();
+        trimmed++;
+      } else {
+        break;
+      }
+    }
+    if (trimmed > 0) {
+      console.log(`[CRASH RECOVERY] Removed ${trimmed} empty/broken entries from end of history.`);
+    }
+
+    // 2. If history is large, compact to last summary + recent entries
+    //    This prevents long re-summarization after a crash/restart.
+    const historyChars = JSON.stringify(state.history).length;
+    if (historyChars > 200_000 && state.history.length > 4) {
+      // Find the last summary entry in history (user message containing <previous_summary>)
+      let lastSummaryIdx = -1;
+      for (let i = state.history.length - 1; i >= 0; i--) {
+        const entry = state.history[i];
+        if (entry.role === 'user' && Array.isArray(entry.content)) {
+          const hasSum = entry.content.some(c =>
+            typeof c === 'object' && c.text && c.text.includes('<previous_summary>')
+          );
+          if (hasSum) {
+            lastSummaryIdx = i;
+            break;
+          }
+        }
+      }
+
+      if (lastSummaryIdx >= 0 && lastSummaryIdx < state.history.length - 1) {
+        // Back up full history before compacting (no data loss)
+        const backupPath = config.paths.historySaveFile.replace('.json', '.pre-compact-backup.json');
+        try {
+          await fs.writeFile(backupPath, historyData);
+          console.log(`[CRASH RECOVERY] Full history backed up to ${backupPath}`);
+        } catch (e) {
+          console.warn(`[CRASH RECOVERY] Could not write backup: ${e.message}`);
+        }
+
+        const beforeSize = state.history.length;
+        // Keep: the last summary entry + everything after it
+        state.history = state.history.slice(lastSummaryIdx);
+        const afterChars = JSON.stringify(state.history).length;
+        console.log(`[CRASH RECOVERY] Compacted history: ${beforeSize} → ${state.history.length} entries (${(historyChars/1000).toFixed(0)}KB → ${(afterChars/1000).toFixed(0)}KB). Last summary at index ${lastSummaryIdx}.`);
+
+        // Reset summary/criticism counters to current step so we don't immediately re-summarize
+        if (state.counters && state.counters.currentStep) {
+          state.counters.lastSummaryStep = state.counters.currentStep;
+          state.counters.lastCriticismStep = state.counters.currentStep;
+          console.log(`[CRASH RECOVERY] Reset lastSummaryStep and lastCriticismStep to ${state.counters.currentStep}.`);
+        }
+      }
+    }
+    // --- End Crash Recovery ---
   } catch (error) {
     if (error.code === "ENOENT") {
       console.log("History file not found, starting with empty history.");
@@ -319,6 +389,20 @@ async function loadPersistentState() {
     state.lastVisitedMaps = [];
   }
 
+  try {
+    const navPlanData = await fs.readFile(config.paths.navigationPlanFile, "utf-8");
+    state.navigationPlan = JSON.parse(navPlanData);
+    console.log("Navigation plan loaded:", state.navigationPlan ? "active" : "none");
+  } catch (error) {
+    if (error.code === "ENOENT") {
+      console.log("No navigation plan file found.");
+      state.navigationPlan = null;
+    } else {
+      console.error("Error loading navigation plan:", error);
+      state.navigationPlan = null;
+    }
+  }
+
   // Ensure directories exist
   try {
     const dataDirPath = path.join(config.paths.baseDir, config.dataDir);
@@ -348,6 +432,7 @@ async function savePersistentState() {
     await fs.writeFile(config.paths.allSummariesSaveFile, JSON.stringify(state.allSummaries, null, 2));
     await fs.writeFile(config.paths.progressStepsFile, JSON.stringify(state.progressSteps, null, 2));
     await fs.writeFile(config.paths.lastVisitedMapsFile, JSON.stringify(state.lastVisitedMaps, null, 2));
+    await fs.writeFile(config.paths.navigationPlanFile, JSON.stringify(state.navigationPlan, null, 2));
   } catch (error) {
     console.error("Error saving persistent state:", error);
   }

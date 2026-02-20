@@ -130,6 +130,12 @@ async function gameLoop() {
             let responseCompleted = false;
             setIsThinking(true);
             state.selfCritiqueReminderAcknowledged = false; // Reset reminder delivery flag for this iteration
+            
+            // Increment navigation plan step counter
+            if (state.navigationPlan) {
+                state.navigationPlan.steps_taken++;
+            }
+            
             // 0. Short pause (optional)
             if (config.loopDelayMs > 0) {
                 await new Promise(resolve => setTimeout(resolve, config.loopDelayMs));
@@ -295,12 +301,43 @@ async function gameLoop() {
             // Proactive history size check: if history JSON exceeds ~2MB, force summary
             // This prevents the API call from hanging on oversized prompts
             const historyJsonSize = JSON.stringify(state.history).length;
-            const shouldSummarizeBasedOnSize = historyJsonSize > 3_000_000;
+            const shouldSummarizeBasedOnSize = historyJsonSize > 8_000_000;
             if (shouldSummarizeBasedOnSize) {
                 console.log(`>>> PROACTIVE: history JSON is ${(historyJsonSize / 1_000_000).toFixed(1)}MB — forcing summary to prevent hang <<<`);
             }
 
-            const shouldSummarize = shouldSummarizeBasedOnSteps || shouldSummarizeBasedOnTokens || shouldSummarizeBasedOnSize; // <<< Updated condition
+            let shouldSummarize = shouldSummarizeBasedOnSteps || shouldSummarizeBasedOnTokens || shouldSummarizeBasedOnSize; // <<< Updated condition
+
+            // --- Summary Loop Safety Valve ---
+            // If 3+ consecutive summaries triggered by token overflow, history is too bloated
+            // for summaries to fix. Auto-clear history to just summary context.
+            if (!state._consecutiveTokenSummaries) state._consecutiveTokenSummaries = 0;
+            if (shouldSummarize && shouldSummarizeBasedOnTokens && stepsSinceLastSummary <= 2) {
+                state._consecutiveTokenSummaries++;
+                console.log(`[SAFETY] Consecutive token-overflow summaries: ${state._consecutiveTokenSummaries}`);
+                if (state._consecutiveTokenSummaries >= 3) {
+                    console.log(`>>> SAFETY VALVE: ${state._consecutiveTokenSummaries} consecutive token-overflow summaries detected — auto-clearing history <<<`);
+                    // Keep only summary entries from history
+                    const summaryHistory = state.history.filter(entry => {
+                        if (entry.role === 'user') {
+                            const text = entry.content?.[0]?.text || '';
+                            return text.includes('<previous_summary>') || text.includes('<system>Resume');
+                        }
+                        if (entry.type === 'message') {
+                            const text = entry.content?.[0]?.text || '';
+                            return text.includes('<summary>');
+                        }
+                        return false;
+                    });
+                    state.history = summaryHistory;
+                    state.lastTotalTokens = 0;
+                    state._consecutiveTokenSummaries = 0;
+                    shouldSummarize = false; // Skip summary this step, just play
+                    console.log(`>>> History auto-cleared to ${state.history.length} summary entries. Resuming gameplay. <<<`);
+                }
+            } else if (!shouldSummarize) {
+                state._consecutiveTokenSummaries = 0; // Reset counter on normal gameplay steps
+            }
 
 
             // Check if the last history item is an EmptyActionError
@@ -360,7 +397,7 @@ async function gameLoop() {
 	                        effort: config.openai.reasoningEffortSummary,
 	                        summary: config.openai.reasoningSummary,
                     },
-                    max_output_tokens: 32000,
+                    max_output_tokens: 20000,
                     store: true,
                     stream: true,
                 });
@@ -741,9 +778,11 @@ async function gameLoop() {
                 state.counters.lastSummaryStep = state.counters.currentStep; // Update last summary step
                 // Update also the lastCriticismStep
                 state.counters.lastCriticismStep = state.counters.currentStep;
+                console.log(`[SUMMARY] Counter updated: lastSummaryStep=${state.counters.lastSummaryStep}, currentStep=${state.counters.currentStep}`);
                 // REMOVED: selfCriticismDone = false;
                 // Save the new history and state.counters
                 await savePersistentState();
+                console.log("[SUMMARY] State saved successfully.");
 
                 // Sync latest summary to mferGPT workspace for heartbeat access
                 try {
@@ -1030,7 +1069,7 @@ async function gameLoop() {
                             break;
                         case "response.output_text.delta":
                             process.stdout.write(event.delta);
-                            broadcast({ type: 'reasoning_chunk', payload: event.delta }); // <<< Broadcast reasoning chunk
+                            // NOTE: Do NOT broadcast output_text as reasoning_chunk — causes duplicate thoughts in UI
                             currentOutputText += event.delta;
                             break;
                         case "response.completed":
@@ -1170,10 +1209,12 @@ async function gameLoop() {
                 state.history = state.history.slice(-3).filter(h => h.role !== 'tool' || state.history.some(prev => prev.role === 'assistant' && JSON.stringify(prev).includes(h.call_id)));
                 // Simpler: just clear history entirely, summaries have all context
                 state.history = [];
-                state.counters.lastSummaryStep = 0; // Force summary on next step
+                // Set lastSummaryStep to currentStep - limitAssistantMessagesForSummary
+                // so the NEXT step triggers a summary, but not an infinite loop
+                state.counters.lastSummaryStep = state.counters.currentStep - config.history.limitAssistantMessagesForSummary;
                 state.lastTotalTokens = 0;
                 await savePersistentState();
-                console.log(">>> History cleared, summary will trigger next step <<<");
+                console.log(`>>> History cleared, summary will trigger next step (lastSummaryStep=${state.counters.lastSummaryStep}) <<<`);
             }
 
             console.error("Pausing for 10 seconds before retrying...");

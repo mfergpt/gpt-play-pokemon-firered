@@ -656,6 +656,16 @@ If you bump into something (a sign, NPC, wall) and can't move forward, DON'T re-
 - If you've been stuck on the same tile for 3+ turns, you're overthinking it. Just move in any free direction and reroute.
 - Signs, NPCs, and ledges are small obstacles — walk around them, don't strategize about them.
 
+**🚨 CRITICAL - Save Often:**
+SAVE YOUR GAME frequently. You lose ALL progress back to your last save if you white out (lose all Pokemon). Save at these moments:
+- **Before ANY gym leader or boss fight** (mandatory — no exceptions)
+- **Before any trainer you haven't fought before**
+- **After every level up**
+- **After catching a new Pokemon**
+- **After buying items or any significant inventory change**
+- **When passing through a new area for the first time**
+- To save: open menu (START) → SAVE → YES. Takes 3 seconds. Losing 30 minutes of progress takes forever.
+
 **Mark Defeated Trainers:** 
 - Always add markers (💀) after trainer battles for progress tracking (Do not add a marker for the rival after you defeated him, because he is not stationary, when you defeat him he moving away from you).
 - The defeated trainer will always be the one in front of you (The one you face after the battle), place the marker on the tile where the trainer is standing.
