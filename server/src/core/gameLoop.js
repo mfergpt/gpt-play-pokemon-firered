@@ -8,7 +8,12 @@ const { calculateRequestCost } = require('../utils/costs');
 const { fetchGameData } = require('../services/pythonService');
 const { buildVisionPayload } = require('../services/screenshotService');
 const { buildUserInputText, buildDeveloperPrompt } = require('../ai/promptBuilder');
-const { processHistoryForAPI } = require('../ai/historyProcessor');
+const {
+    processHistoryForAPI,
+    compactToolResultForStorage,
+    compactUserMessageForStorage,
+    compactAssistantOutputItemForStorage,
+} = require('../ai/historyProcessor');
 const { defineTools, handleToolCall } = require('../ai/tools');
 const { updateProgressSteps, updateLastVisitedMaps } = require('./progressTracker');
 const { openai } = require('./openaiClient');
@@ -360,7 +365,7 @@ async function gameLoop() {
                 console.log(`Triggering summary. Reason: ${shouldSummarizeBasedOnSteps ? 'Steps limit reached' : ''}${shouldSummarizeBasedOnSteps && shouldSummarizeBasedOnTokens ? ' and ' : ''}${shouldSummarizeBasedOnTokens ? 'Token limit reached' : ''}.`); // Add logging
                 const summaryPrompt = await fs.readFile(path.join(config.promptsDir, "summary.txt"), "utf8");
 
-                const userInputText = await buildUserInputText(gameDataJson);
+                const userInputText = await buildUserInputText(gameDataJson, { mode: "summary" });
                 // Broadcast the generated map
                 // if (mapDisplayRef) {
                 //     broadcast({ type: 'map_update', payload: mapDisplayRef });
@@ -376,7 +381,12 @@ async function gameLoop() {
                 };
                 // history.push(newUserMessage);
 
-                const developerPrompt = await buildDeveloperPrompt();
+                const developerPrompt = config.context.useCompactDeveloperPromptForSummary
+                    ? await buildDeveloperPrompt({
+                        minimalText:
+                            "You are writing an incremental continuity summary for a Pokemon FireRed run. Follow the user's summary instructions exactly. Do not call tools. Keep the output concise, factual, and continuation-ready.",
+                    })
+                    : await buildDeveloperPrompt({ mode: "summary" });
                 const processedHistory = processHistoryForAPI(state.history); // Clean old messages
                 const apiInput = [developerPrompt, ...processedHistory, newUserMessage];
 
@@ -397,7 +407,7 @@ async function gameLoop() {
 	                        effort: config.openai.reasoningEffortSummary,
 	                        summary: config.openai.reasoningSummary,
                     },
-                    max_output_tokens: 20000,
+                    max_output_tokens: config.openai.maxOutputTokensSummary,
                     store: true,
                     stream: true,
                 });
@@ -557,7 +567,7 @@ async function gameLoop() {
                                 effort: "xhigh",
                                 summary: config.openai.reasoningSummary,
                             },
-                            max_output_tokens: 64000,
+                            max_output_tokens: config.openai.maxOutputTokensSummaryRollup,
                             store: true,
                             stream: true,
                         });
@@ -762,7 +772,8 @@ async function gameLoop() {
 
                 if (finalResponse?.output) {
                     finalResponse.output.forEach(item => {
-                        state.history.push(item); // Add the item (potentially modified) to the history
+                        const compactedItem = compactAssistantOutputItemForStorage(item);
+                        if (compactedItem) state.history.push(compactedItem);
                     });
                 }
 
@@ -814,47 +825,30 @@ async function gameLoop() {
                 continue; // Skip the rest of the loop for summary turn
 
             } else if (!state.skipNextUserMessage) { // <<< Check the flag BEFORE creating newUserMessage
-                const userInputText = await buildUserInputText(gameDataJson);
-                const lastHistoryItem = state.history.length > 0 ? state.history[state.history.length - 1] : null;
-                const canExtendLastToolOutput = lastHistoryItem?.type === "function_call_output" && Array.isArray(lastHistoryItem.output);
-                // console.log("User input text:", userInputText);
-                // Broadcast the generated map
-                // if (mapDisplayRef) {
-                //     broadcast({ type: 'map_update', payload: mapDisplayRef });
-                // }
-
-                if (canExtendLastToolOutput) {
-                    const appendedOutputItems = [];
-
-                    appendedOutputItems.push({ "type": "input_image", "image_url": `data:image/png;base64,${image1Base64}` });
-                    if (image2Base64) {
-                        appendedOutputItems.push({ "type": "input_image", "image_url": `data:image/png;base64,${image2Base64}` });
-                    }
-                    appendedOutputItems.push({ "type": "input_text", "text": userInputText });
-
-                    lastHistoryItem.output.push(...appendedOutputItems);
-                    console.log("Appended inputs to last function_call_output entry.");
-                } else {
-                    // Broadcast the generated map
-                    // if (mapDisplayRef) {
-                    //     broadcast({ type: 'map_update', payload: mapDisplayRef });
-                    // }
-                    const content = [{ "type": "input_image", "image_url": `data:image/png;base64,${image1Base64}` }];
-                    if (image2Base64) {
-                        content.push({ "type": "input_image", "image_url": `data:image/png;base64,${image2Base64}` });
-                    }
-                    content.push({ "type": "input_text", "text": userInputText });
-                    newUserMessage = { "role": "user", "content": content };
-                    console.log("Created newUserMessage for this step.");
+                const userInputText = await buildUserInputText(gameDataJson, { mode: "main" });
+                const content = [{ "type": "input_image", "image_url": `data:image/png;base64,${image1Base64}` }];
+                if (image2Base64) {
+                    content.push({ "type": "input_image", "image_url": `data:image/png;base64,${image2Base64}` });
                 }
+                content.push({ "type": "input_text", "text": userInputText });
+                newUserMessage = { "role": "user", "content": content };
+                console.log("Created newUserMessage for this step.");
             } else {
                 newUserMessage = null; // Ensure it's null if skipped
                 console.log("Skipping creation of newUserMessage due to skipNextUserMessage flag.");
             }
             setIsThinking(true);
 
+            // Only criticize if enough steps have passed AND we are not summarizing this turn
+            const shouldCriticize = stepsSinceLastCriticism >= config.history.limitAssistantMessagesForSelfCriticism;
+
             // 4. Prepare the complete input for the OpenAI API
-            const developerPrompt = await buildDeveloperPrompt();
+            const developerPrompt = shouldCriticize && config.context.useCompactDeveloperPromptForCriticism
+                ? await buildDeveloperPrompt({
+                    minimalText:
+                        "You are writing self-criticism for a Pokemon FireRed gameplay agent. Follow the user's self-criticism instructions exactly. Do not call tools. Return only critique content.",
+                })
+                : await buildDeveloperPrompt({ mode: shouldCriticize ? "criticism" : "main" });
             const processedHistory = processHistoryForAPI(newUserMessage ? [...state.history, newUserMessage] : state.history); // Clean old messages
             const apiInput = [developerPrompt, ...processedHistory];
             const tools = defineTools();
@@ -865,8 +859,6 @@ async function gameLoop() {
             // console.log("API Input (history size):", apiInput.length); // Debug
 
 
-            // Only criticize if enough steps have passed AND we are not summarizing this turn
-            const shouldCriticize = stepsSinceLastCriticism >= config.history.limitAssistantMessagesForSelfCriticism;
             if (shouldCriticize) { // Use the pre-calculated flag and remove assistantHistoryLength check
                 const selfCriticismPrompt = await fs.readFile(path.join(config.promptsDir, "self_criticism.txt"), "utf8");
                 const newUserMessage = {
@@ -896,7 +888,7 @@ async function gameLoop() {
 	                        effort: config.openai.reasoningEffortCriticism,
 	                        summary: config.openai.reasoningSummary,
                     },
-                    max_output_tokens: 32000,
+                    max_output_tokens: config.openai.maxOutputTokensSelfCriticism,
                     store: true,
                     stream: true,
                 });
@@ -1001,8 +993,11 @@ async function gameLoop() {
 
                 if (finalResponse?.output) {
                     finalResponse.output.forEach(item => {
-                        state.history.push(item); // Add the item (potentially modified) to the history
-                        apiInput.push(item);
+                        const compactedItem = compactAssistantOutputItemForStorage(item);
+                        if (compactedItem) {
+                            state.history.push(compactedItem);
+                            apiInput.push(compactedItem);
+                        }
                     });
                 }
 
@@ -1035,7 +1030,7 @@ async function gameLoop() {
                 tools: tools,
                 tool_choice: "required",
                 parallel_tool_calls: false,
-                max_output_tokens: 32000,
+                max_output_tokens: config.openai.maxOutputTokensMain,
                 store: true,
                 stream: true,
             });
@@ -1143,7 +1138,7 @@ async function gameLoop() {
                 throw new Error("No final response received from the OpenAI API after the stream.");
             }
             if (!state.skipNextUserMessage && newUserMessage) {
-                state.history.push(newUserMessage);
+                state.history.push(compactUserMessageForStorage(newUserMessage));
             }
             setIsThinking(false);
             // Add response elements (reasoning, message, function call) to history
@@ -1151,8 +1146,8 @@ async function gameLoop() {
             // let lastThinkingForReplacement = currentReasoning; // Use the streamed reasoning // Removed replacement logic
             if (finalResponse.output) {
                 finalResponse.output.forEach(item => {
-                    // Specific logic to replace 'reasoning' in tool args REMOVED
-                    state.history.push(item); // Add the item to the history
+                    const compactedItem = compactAssistantOutputItemForStorage(item);
+                    if (compactedItem) state.history.push(compactedItem);
                 });
             }
 
@@ -1166,7 +1161,7 @@ async function gameLoop() {
                         // Pass gameDataJson AND the call_id (which is item.id)
                         setIsThinking(false);
                         const toolResult = await handleToolCall(item, gameDataJson);
-                        state.history.push(toolResult); // Add the tool result to the history
+                        state.history.push(compactToolResultForStorage(toolResult)); // Persist compact tool output
                     }
                 }
             }

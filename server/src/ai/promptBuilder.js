@@ -15,19 +15,92 @@ function escapeXml(text) {
     // .replace(/'/g, "&apos;");
 }
 
-function formatMemoryStructured(memoryObj) {
-  const entries = memoryObj && typeof memoryObj === "object" ? Object.entries(memoryObj) : [];
+function truncateText(text, maxChars, options = {}) {
+  if (typeof text !== "string") return "";
+  if (!Number.isFinite(maxChars) || maxChars <= 0 || text.length <= maxChars) return text;
+  const marker = options.marker || "\n...[truncated]...\n";
+  if (options.mode === "tail") {
+    const keep = Math.max(0, maxChars - marker.length);
+    return text.slice(0, keep) + marker;
+  }
+  const keepLeft = Math.floor((maxChars - marker.length) / 2);
+  const keepRight = Math.max(0, maxChars - marker.length - keepLeft);
+  return text.slice(0, keepLeft) + marker + text.slice(text.length - keepRight);
+}
+
+function truncateTaggedBlock(text, tagName, maxChars) {
+  if (typeof text !== "string" || !Number.isFinite(maxChars) || maxChars <= 0) return text;
+  const re = new RegExp(`(<${tagName}[^>]*>)([\\s\\S]*?)(</${tagName}>)`);
+  const match = text.match(re);
+  if (!match) return text;
+  const [, openTag, body, closeTag] = match;
+  if (body.length <= maxChars) return text;
+  const trimmed = truncateText(body, maxChars, { mode: "tail" });
+  return text.replace(re, `${openTag}${trimmed}${closeTag}`);
+}
+
+function applySectionBudgets(text, sectionBudgetMap) {
+  if (typeof text !== "string" || !sectionBudgetMap || typeof sectionBudgetMap !== "object") {
+    return text;
+  }
+  let out = text;
+  for (const [tag, maxChars] of Object.entries(sectionBudgetMap)) {
+    out = truncateTaggedBlock(out, tag, maxChars);
+  }
+  return out;
+}
+
+function scoreMemoryKey(key) {
+  const k = String(key || "").toLowerCase();
+  let score = 0;
+  if (/(nav|route|path|direction|maze|cave|room|floor|ladder|exit|entrance)/.test(k)) score += 8;
+  if (/(objective|goal|next|plan|priority|task|todo)/.test(k)) score += 6;
+  if (/(current|now|active|blocked|stuck|warning|important|critical)/.test(k)) score += 5;
+  if (/(battle|team|move|tm|item|quest|badge|gym)/.test(k)) score += 3;
+  return score;
+}
+
+function formatMemoryStructured(memoryObj, options = {}) {
+  const { maxItems, maxValueChars } = options;
+  let entries = memoryObj && typeof memoryObj === "object" ? Object.entries(memoryObj) : [];
   if (entries.length === 0) return "<memory />\n";
+
+  // Prefer higher-signal memory keys when we must trim.
+  entries.sort((a, b) => {
+    const scoreA = scoreMemoryKey(a[0]);
+    const scoreB = scoreMemoryKey(b[0]);
+    if (scoreA !== scoreB) return scoreB - scoreA;
+    return String(a[0]).localeCompare(String(b[0]));
+  });
+
+  let dropped = 0;
+  if (Number.isFinite(maxItems) && maxItems > 0 && entries.length > maxItems) {
+    dropped = entries.length - maxItems;
+    entries = entries.slice(0, maxItems);
+  }
 
   const lines = ["<memory>"];
   for (const [k, v] of entries) {
-    lines.push(`  <item key="${escapeXml(k)}">${escapeXml(v)}</item>`);
+    const rawValue = typeof v === "string" ? v : JSON.stringify(v);
+    const value = Number.isFinite(maxValueChars) && maxValueChars > 0
+      ? truncateText(rawValue, maxValueChars, { mode: "tail" })
+      : rawValue;
+    lines.push(`  <item key="${escapeXml(k)}">${escapeXml(value)}</item>`);
+  }
+  if (dropped > 0) {
+    lines.push(`  <meta trimmed_items="${dropped}" />`);
   }
   lines.push("</memory>");
   return lines.join("\n") + "\n";
 }
 
-function formatRecentMarkers(markers, lastVisitedMaps, isInDialog) {
+function formatRecentMarkers(markers, lastVisitedMaps, isInDialog, options = {}) {
+  const {
+    maxMaps = 6,
+    maxMarkersPerMap = 18,
+    markerLabelMaxChars = 180,
+  } = options;
+
   if (!markers || typeof markers !== "object" || Object.keys(markers).length === 0) {
     return "<markers>No markers set</markers>\n";
   }
@@ -44,9 +117,23 @@ function formatRecentMarkers(markers, lastVisitedMaps, isInDialog) {
       .map((e) => [String(e.map_id), String(e.map_name || `Unknown Map (${e.map_id})`)])
   );
 
+  const orderedVisitedMapIds = visited
+    .map((entry) => String(entry?.map_id ?? ""))
+    .filter((id) => id && lastVisitedMapIds.has(id));
+
+  const seenMapIds = new Set();
+  const mapsToRender = [];
+  for (let i = orderedVisitedMapIds.length - 1; i >= 0; i--) {
+    const mapId = orderedVisitedMapIds[i];
+    if (seenMapIds.has(mapId)) continue;
+    seenMapIds.add(mapId);
+    mapsToRender.push(mapId);
+    if (mapsToRender.length >= maxMaps) break;
+  }
+
   const mapMarkerStrings = [];
-  for (const [mapId, mapMarkers] of Object.entries(markers)) {
-    if (!lastVisitedMapIds.has(String(mapId))) continue;
+  for (const mapId of mapsToRender) {
+    const mapMarkers = markers[mapId];
     if (!mapMarkers || typeof mapMarkers !== "object" || Object.keys(mapMarkers).length === 0) continue;
 
     const mapName =
@@ -62,11 +149,20 @@ function formatRecentMarkers(markers, lastVisitedMaps, isInDialog) {
     });
 
     const individualMarkerStrings = [];
+    let hiddenMarkers = 0;
     for (const coords of sortedCoords) {
       const marker = mapMarkers[coords];
       if (!marker || typeof marker !== "object") continue;
       const [x, y] = coords.split("_");
-      individualMarkerStrings.push(`(${x}, ${y})=${marker.emoji} ${marker.label}`);
+      if (individualMarkerStrings.length >= maxMarkersPerMap) {
+        hiddenMarkers++;
+        continue;
+      }
+      const label = truncateText(String(marker.label || ""), markerLabelMaxChars, { mode: "tail" });
+      individualMarkerStrings.push(`(${x}, ${y})=${marker.emoji} ${label}`);
+    }
+    if (hiddenMarkers > 0) {
+      individualMarkerStrings.push(`(+${hiddenMarkers} more markers hidden)`);
     }
 
     if (individualMarkerStrings.length === 0) continue;
@@ -92,7 +188,8 @@ Notes:
 \n`;
 }
 
-function formatNavigationPlan(plan, currentPos) {
+function formatNavigationPlan(plan, currentPos, options = {}) {
+  const { reasonMaxChars = 420, routeNotesMaxChars = 900 } = options;
   if (!plan) return "<navigation_plan>No active navigation plan.</navigation_plan>\n";
   
   const dest = plan.destination;
@@ -113,10 +210,13 @@ function formatNavigationPlan(plan, currentPos) {
     dirHint = `\n  <relative_direction>Different map — navigate to map exit first</relative_direction>`;
   }
   
+  const reason = truncateText(String(plan.reason || ""), reasonMaxChars, { mode: "tail" });
+  const routeNotes = truncateText(String(plan.route_notes || ""), routeNotesMaxChars, { mode: "tail" });
+
   return `<navigation_plan active="true" created_step="${plan.created_at_step}">
   <destination map="${escapeXml(dest.map_name)}" map_id="${escapeXml(dest.map_id)}" x="${dest.x}" y="${dest.y}" />
-  <reason>${escapeXml(plan.reason)}</reason>
-  <route_notes>${escapeXml(plan.route_notes)}</route_notes>${dirHint}
+  <reason>${escapeXml(reason)}</reason>
+  <route_notes>${escapeXml(routeNotes)}</route_notes>${dirHint}
   <current_facing>${escapeXml(currentPos?.facing || "unknown")}</current_facing>
   <steps_since_plan>${plan.steps_taken}</steps_since_plan>
 </navigation_plan>\n`;
@@ -354,27 +454,33 @@ async function fetchLiveChat() {
   return { twitchChat, mentions };
 }
 
-function formatLiveChat(twitchChat, mentions) {
+function formatLiveChat(twitchChat, mentions, options = {}) {
+  const {
+    maxMessages = 6,
+    maxMentions = 3,
+    messageMaxChars = 220,
+  } = options;
   const lines = ["<live_chat>"];
 
-  // Last 10 twitch messages
-  const recentChat = twitchChat.slice(-10);
+  // Keep only the latest few chat lines to avoid context bloat.
+  const recentChat = (Array.isArray(twitchChat) ? twitchChat : []).slice(-maxMessages);
   if (recentChat.length > 0) {
     lines.push("  <twitch_chat>");
     for (const msg of recentChat) {
-      lines.push(`    <msg user="${escapeXml(msg.username)}">${escapeXml(msg.text)}</msg>`);
+      const text = truncateText(String(msg?.text || ""), messageMaxChars, { mode: "tail" });
+      lines.push(`    <msg user="${escapeXml(msg?.username || "unknown")}">${escapeXml(text)}</msg>`);
     }
     lines.push("  </twitch_chat>");
   } else {
     lines.push("  <twitch_chat>No messages yet</twitch_chat>");
   }
 
-  // Last 5 twitter mentions
-  const recentMentions = mentions.slice(-5);
+  const recentMentions = (Array.isArray(mentions) ? mentions : []).slice(-maxMentions);
   if (recentMentions.length > 0) {
     lines.push("  <twitter_mentions>");
     for (const m of recentMentions) {
-      lines.push(`    <mention user="${escapeXml(m.username || m.author_id || 'unknown')}">${escapeXml(m.text || '')}</mention>`);
+      const text = truncateText(String(m?.text || ""), messageMaxChars, { mode: "tail" });
+      lines.push(`    <mention user="${escapeXml(m?.username || m?.author_id || 'unknown')}">${escapeXml(text)}</mention>`);
     }
     lines.push("  </twitter_mentions>");
   } else {
@@ -385,7 +491,28 @@ function formatLiveChat(twitchChat, mentions) {
   return lines.join("\n") + "\n";
 }
 
-async function buildUserInputText(gameDataJson) {
+async function buildUserInputText(gameDataJson, options = {}) {
+  const mode = options.mode === "summary" ? "summary" : "main";
+  const isSummaryMode = mode === "summary";
+  const sectionBudgets = isSummaryMode ? config.context.summarySectionMaxChars : config.context.sectionMaxChars;
+  const userInputMaxChars = isSummaryMode ? config.context.userInputSummaryMaxChars : config.context.userInputMaxChars;
+  const includeLiveChat = config.context.includeLiveChatInPrompt && !isSummaryMode;
+  const includePcData = !isSummaryMode;
+
+  const memoryMaxItems = isSummaryMode
+    ? Math.min(config.context.memoryMaxItems, 24)
+    : config.context.memoryMaxItems;
+  const memoryItemValueMaxChars = isSummaryMode
+    ? Math.min(config.context.memoryItemValueMaxChars, 180)
+    : config.context.memoryItemValueMaxChars;
+
+  const markersMaxMaps = isSummaryMode
+    ? Math.min(config.context.markersMaxMaps, 4)
+    : config.context.markersMaxMaps;
+  const markersMaxPerMap = isSummaryMode
+    ? Math.min(config.context.markersMaxPerMap, 10)
+    : config.context.markersMaxPerMap;
+
   const { counters } = state;
 
   const trainer = gameDataJson?.current_trainer_data || null;
@@ -413,9 +540,15 @@ async function buildUserInputText(gameDataJson) {
     localCol = visibleW ? Math.floor(visibleW / 2) : 0;
   }
 
-  // Fetch live chat from streamer
-  const { twitchChat, mentions } = await fetchLiveChat();
-  const liveChatDisplay = formatLiveChat(twitchChat, mentions);
+  let liveChatDisplay = "<live_chat>Live chat omitted for this context mode</live_chat>\n";
+  if (includeLiveChat) {
+    const { twitchChat, mentions } = await fetchLiveChat();
+    liveChatDisplay = formatLiveChat(twitchChat, mentions, {
+      maxMessages: config.context.liveChatMaxMessages,
+      maxMentions: config.context.liveChatMaxMentions,
+      messageMaxChars: config.context.liveChatMessageMaxChars,
+    });
+  }
 
   let gameAreaDisplay = null;
   let minimapDisplay = null;
@@ -455,6 +588,29 @@ async function buildUserInputText(gameDataJson) {
   }
 
 
+  const pcItemsDisplay = includePcData
+    ? formatPcItems(gameDataJson?.pc_items)
+    : "<pc_items><info>PC details omitted in summary mode</info></pc_items>\n";
+  const pcPokemonDisplay = includePcData
+    ? formatPcPokemon(gameDataJson?.pc_data)
+    : "<pc_pokemon><info>PC details omitted in summary mode</info></pc_pokemon>\n";
+
+  const navigationPlanDisplay = formatNavigationPlan(state.navigationPlan, pos, {
+    reasonMaxChars: isSummaryMode ? 300 : 420,
+    routeNotesMaxChars: isSummaryMode ? 650 : 900,
+  });
+
+  const memoryDisplay = formatMemoryStructured(state.memory, {
+    maxItems: memoryMaxItems,
+    maxValueChars: memoryItemValueMaxChars,
+  });
+
+  const markersDisplay = formatRecentMarkers(state.markers, state.lastVisitedMaps, isInDialog, {
+    maxMaps: markersMaxMaps,
+    maxMarkersPerMap: markersMaxPerMap,
+    markerLabelMaxChars: isSummaryMode ? 120 : 180,
+  });
+
   const trainerName = trainer?.name || "PLAYER";
   const money = trainer?.money ?? 0;
   const badgeCount = trainer?.badge_count ?? 0;
@@ -477,21 +633,21 @@ async function buildUserInputText(gameDataJson) {
   <trainer name="${escapeXml(trainerName)}" money="${money}" badges="${badgeCount}/8" />
   ${formatPokemonTeam(gameDataJson?.current_pokemon_data)}
   ${formatInventory(gameDataJson?.inventory_data)}
-  ${formatPcItems(gameDataJson?.pc_items)}
-  ${formatPcPokemon(gameDataJson?.pc_data)}
+  ${pcItemsDisplay}
+  ${pcPokemonDisplay}
 </player_stats>
 
 ${formatBattleState(gameDataJson?.battle_data)}
 
-${formatNavigationPlan(state.navigationPlan, pos)}
+${navigationPlanDisplay}
 
 <objectives_section>
 ${formatObjectives(state.objectives)}
 </objectives_section>
 
-${formatMemoryStructured(state.memory)}
+${memoryDisplay}
 
-${formatRecentMarkers(state.markers, state.lastVisitedMaps, isInDialog)}
+${markersDisplay}
 
 <visible_area>
 ${isInDialog ? "Not visible in dialogue" : gameAreaDisplay || "No visible area data"}
@@ -504,6 +660,28 @@ ${isInDialog ? "Not visible in dialogue" : minimapDisplay || "No minimap data"}
 ${liveChatDisplay}
 </game_state>
   `.trim();
+
+  userInputText = applySectionBudgets(userInputText, sectionBudgets);
+
+  if (typeof userInputText === "string" && Number.isFinite(userInputMaxChars) && userInputText.length > userInputMaxChars) {
+    const match = userInputText.match(/^(<game_state[^>]*>)([\s\S]*)(<\/game_state>)$/);
+    if (match) {
+      const [, openTag, body, closeTag] = match;
+      const availableBody = Math.max(1000, userInputMaxChars - openTag.length - closeTag.length);
+      const trimmedBody = truncateText(body, availableBody, {
+        mode: "tail",
+        marker: "\n...[context trimmed for budget]...\n",
+      });
+      userInputText = `${openTag}${trimmedBody}${closeTag}`;
+    } else {
+      userInputText = truncateText(userInputText, userInputMaxChars, {
+        mode: "tail",
+        marker: "\n...[context trimmed for budget]...\n",
+      });
+    }
+  }
+
+  console.log(`[PromptBuilder] mode=${mode} chars=${userInputText.length}`);
 
   if (state.selfCritiqueReminderPending) {
     userInputText += `
@@ -521,8 +699,23 @@ You can safely update them all at once.
   return userInputText;
 }
 
-async function buildDeveloperPrompt() {
+async function buildDeveloperPrompt(options = {}) {
+  if (typeof options.minimalText === "string" && options.minimalText.trim()) {
+    return {
+      role: "developer",
+      content: [{ type: "input_text", text: options.minimalText.trim() }],
+    };
+  }
+
+  const mode = options.mode || "main";
   const gamePrompt = await fs.readFile(path.join(config.promptsDir, "game.txt"), "utf8");
+  const includeIdentity = config.context.includeIdentityContextInDeveloperPrompt && mode === "main";
+  if (!includeIdentity) {
+    return {
+      role: "developer",
+      content: [{ type: "input_text", text: gamePrompt }],
+    };
+  }
 
   // Load mferGPT identity from workspace core files
   const WORKSPACE = "/Users/mfergpt/.openclaw/workspace";
@@ -535,11 +728,24 @@ async function buildDeveloperPrompt() {
   ];
 
   let identityContext = "";
+  let identityBudgetRemaining = Math.max(0, Number(config.context.developerPromptIdentityMaxChars) || 0);
   for (const f of identityFiles) {
+    if (identityBudgetRemaining <= 0) break;
     try {
       let content = await fs.readFile(f.path, "utf8");
-      if (f.maxChars) content = content.slice(0, f.maxChars);
-      identityContext += `\n## ${f.name}\n\n${content}\n`;
+      const fileMaxChars = Math.min(
+        identityBudgetRemaining,
+        Number.isFinite(f.maxChars) ? f.maxChars : identityBudgetRemaining
+      );
+      content = truncateText(content, fileMaxChars, { mode: "tail" });
+      const section = `\n## ${f.name}\n\n${content}\n`;
+      if (section.length > identityBudgetRemaining) {
+        identityContext += truncateText(section, identityBudgetRemaining, { mode: "tail" });
+        identityBudgetRemaining = 0;
+      } else {
+        identityContext += section;
+        identityBudgetRemaining -= section.length;
+      }
     } catch (_) {
       // Skip missing files
     }
@@ -549,14 +755,23 @@ async function buildDeveloperPrompt() {
   try {
     const now = new Date();
     for (let offset = 0; offset <= 1; offset++) {
+      if (identityBudgetRemaining <= 0) break;
       const d = new Date(now);
       d.setDate(d.getDate() - offset);
       const dateStr = d.toISOString().slice(0, 10);
       const memPath = `${WORKSPACE}/memory/${dateStr}.md`;
       try {
         const mem = await fs.readFile(memPath, "utf8");
-        // Only include first 2000 chars to avoid bloating context
-        identityContext += `\n## RECENT MEMORY (${dateStr})\n\n${mem.slice(0, 2000)}\n`;
+        const memMaxChars = Math.min(identityBudgetRemaining, 1200);
+        const memChunk = truncateText(mem, memMaxChars, { mode: "tail" });
+        const section = `\n## RECENT MEMORY (${dateStr})\n\n${memChunk}\n`;
+        if (section.length > identityBudgetRemaining) {
+          identityContext += truncateText(section, identityBudgetRemaining, { mode: "tail" });
+          identityBudgetRemaining = 0;
+        } else {
+          identityContext += section;
+          identityBudgetRemaining -= section.length;
+        }
       } catch (_) {}
     }
   } catch (_) {}

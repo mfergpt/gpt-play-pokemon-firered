@@ -5,6 +5,33 @@
  */
 
 const { getClient, getAuthToken, getClientWithFallback, handleApiError, getActiveProvider, mapModelForBankr } = require("./anthropicClient");
+const { config } = require("../config");
+
+function truncateText(text, maxChars) {
+  if (typeof text !== "string") return "";
+  if (!Number.isFinite(maxChars) || maxChars <= 0 || text.length <= maxChars) return text;
+  const marker = "\n...[truncated]...\n";
+  const keep = Math.max(0, maxChars - marker.length);
+  return text.slice(0, keep) + marker;
+}
+
+function squeezeMessageBlocks(messages, textMaxChars, toolResultMaxChars, preserveTailMessages = 4) {
+  const tailStart = Math.max(0, messages.length - Math.max(0, preserveTailMessages));
+  return messages.map((msg, idx) => {
+    if (idx >= tailStart) return msg;
+    if (!Array.isArray(msg.content)) return msg;
+    const nextContent = msg.content.map((block) => {
+      if (block?.type === "text" && typeof block.text === "string") {
+        return { ...block, text: truncateText(block.text, textMaxChars) };
+      }
+      if (block?.type === "tool_result" && typeof block.content === "string") {
+        return { ...block, content: truncateText(block.content, toolResultMaxChars) };
+      }
+      return block;
+    });
+    return { ...msg, content: nextContent };
+  });
+}
 
 /**
  * Convert OpenAI-style input messages to Anthropic format.
@@ -13,6 +40,13 @@ const { getClient, getAuthToken, getClientWithFallback, handleApiError, getActiv
  * - "function_call_output" → tool_result blocks
  */
 function convertMessages(input) {
+  const textBlockMaxChars =
+    Number(process.env.ANTHROPIC_MAX_TEXT_BLOCK_CHARS) ||
+    Math.min(20000, config.history?.userMessageMaxChars || 30000);
+  const toolResultBlockMaxChars =
+    Number(process.env.ANTHROPIC_MAX_TOOL_RESULT_CHARS) ||
+    (config.history?.toolResultKeepMaxChars || 1800);
+
   let systemText = "";
   const messages = [];
 
@@ -30,7 +64,7 @@ function convertMessages(input) {
                 .map((b) => b.text)
                 .join("\n")
             : "";
-      if (text) systemText += (systemText ? "\n\n" : "") + text;
+      if (text) systemText += (systemText ? "\n\n" : "") + truncateText(text, 120000);
       continue;
     }
 
@@ -49,7 +83,7 @@ function convertMessages(input) {
           {
             type: "tool_result",
             tool_use_id: msg.call_id,
-            content: outputText,
+            content: truncateText(outputText, toolResultBlockMaxChars),
           },
         ],
       });
@@ -80,7 +114,9 @@ function convertMessages(input) {
           ? msg.content
           : Array.isArray(msg.content)
             ? msg.content.map((b) => {
-                if (b.type === "input_text" || b.type === "text") return { type: "text", text: b.text };
+                if (b.type === "input_text" || b.type === "text") {
+                  return { type: "text", text: truncateText(String(b.text || ""), textBlockMaxChars) };
+                }
                 if (b.type === "input_image" || b.type === "image") {
                   // Extract base64 data from various formats
                   let imageData = b.data || "";
@@ -106,9 +142,9 @@ function convertMessages(input) {
                     },
                   };
                 }
-                return { type: "text", text: JSON.stringify(b) };
+                return { type: "text", text: truncateText(JSON.stringify(b), 2000) };
               }).filter(Boolean)
-            : [{ type: "text", text: String(msg.content) }];
+            : [{ type: "text", text: truncateText(String(msg.content), textBlockMaxChars) }];
       if (content.length > 0) messages.push({ role: "user", content });
       continue;
     }
@@ -121,8 +157,8 @@ function convertMessages(input) {
           : Array.isArray(msg.content)
             ? msg.content
                 .filter((b) => b.type === "output_text" || b.type === "text")
-                .map((b) => ({ type: "text", text: b.text }))
-            : [{ type: "text", text: String(msg.content || "") }];
+                .map((b) => ({ type: "text", text: truncateText(String(b.text || ""), textBlockMaxChars) }))
+            : [{ type: "text", text: truncateText(String(msg.content || ""), textBlockMaxChars) }];
       
       // Check if this assistant message also has tool calls (from history)
       if (msg.output && Array.isArray(msg.output)) {
@@ -130,7 +166,9 @@ function convertMessages(input) {
         for (const item of msg.output) {
           if (item.type === "message" && item.content) {
             for (const c of item.content) {
-              if (c.type === "output_text") blocks.push({ type: "text", text: c.text });
+              if (c.type === "output_text") {
+                blocks.push({ type: "text", text: truncateText(String(c.text || ""), textBlockMaxChars) });
+              }
             }
           }
           if (item.type === "function_call") {
@@ -239,21 +277,38 @@ async function* anthropicResponsesCreate(options) {
   };
 
   let estimated = estimateTokens(cleanedMessages);
-  console.log(`[Anthropic] Token estimate: ${estimated} tokens from ${cleanedMessages.length} messages (system: ${(system||'').length} chars)`);
-  const TOKEN_LIMIT = 150000;
-  while (estimated > TOKEN_LIMIT && cleanedMessages.length > 4) {
+  const configuredLimit = Number(process.env.ANTHROPIC_INPUT_TOKEN_LIMIT || config.openai.tokenLimit || 150000);
+  const reservedForOutput = Number(
+    process.env.ANTHROPIC_RESERVED_OUTPUT_TOKENS || Math.min(options.max_output_tokens || 8192, 20000)
+  );
+  const safetyBuffer = Number(process.env.ANTHROPIC_SAFETY_INPUT_BUFFER || 8000);
+  const inputBudget = Math.max(20000, configuredLimit - reservedForOutput - safetyBuffer);
+
+  console.log(
+    `[Anthropic] Token estimate: ${estimated} tokens from ${cleanedMessages.length} messages (inputBudget=${inputBudget}, configuredLimit=${configuredLimit})`
+  );
+
+  while (estimated > inputBudget && cleanedMessages.length > 4) {
     // Remove from the front (oldest), but keep the very first message for context
     cleanedMessages.splice(1, 2); // Remove pairs to maintain alternation
     estimated = estimateTokens(cleanedMessages);
   }
-  if (estimated > TOKEN_LIMIT && cleanedMessages.length > 2) {
+  if (estimated > inputBudget) {
+    cleanedMessages = squeezeMessageBlocks(cleanedMessages, 4000, 2000, 4);
+    estimated = estimateTokens(cleanedMessages);
+  }
+  if (estimated > inputBudget) {
+    cleanedMessages = squeezeMessageBlocks(cleanedMessages, 2200, 1100, 4);
+    estimated = estimateTokens(cleanedMessages);
+  }
+  if (estimated > inputBudget && cleanedMessages.length > 2) {
     // Nuclear option: keep only last 2 messages
     console.warn(`[Anthropic] NUCLEAR TRIM: estimated ${estimated} tokens, keeping only last 2 messages`);
     cleanedMessages = cleanedMessages.slice(-2);
     estimated = estimateTokens(cleanedMessages);
   }
-  if (estimated > TOKEN_LIMIT) {
-    console.warn(`[Anthropic] Warning: estimated ${estimated} tokens still exceeds limit after trimming`);
+  if (estimated > inputBudget) {
+    console.warn(`[Anthropic] Warning: estimated ${estimated} tokens still exceeds input budget after trimming`);
   }
 
   // Sanitize all string content to remove unpaired surrogates before sending

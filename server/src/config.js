@@ -43,6 +43,10 @@ const config = {
       process.env.OPENAI_SERVICE_TIER_SELF_CRITICISM || process.env.OPENAI_SERVICE_TIER || "priority",
     service_tierSummary: process.env.OPENAI_SERVICE_TIER_SUMMARY || process.env.OPENAI_SERVICE_TIER || "priority",
     service_tierPathfinding: process.env.OPENAI_SERVICE_TIER_PATHFINDING || "priority",
+    maxOutputTokensMain: Number(process.env.OPENAI_MAX_OUTPUT_TOKENS_MAIN || 16000),
+    maxOutputTokensSelfCriticism: Number(process.env.OPENAI_MAX_OUTPUT_TOKENS_SELF_CRITICISM || 12000),
+    maxOutputTokensSummary: Number(process.env.OPENAI_MAX_OUTPUT_TOKENS_SUMMARY || 14000),
+    maxOutputTokensSummaryRollup: Number(process.env.OPENAI_MAX_OUTPUT_TOKENS_SUMMARY_ROLLUP || 24000),
 
     tokenPrice: {
       "gpt-5.2": { input: 1.75, cached_input: 0.175, output: 14 },
@@ -135,16 +139,70 @@ const config = {
     },
   },
 
+  // --- Prompt / Context Budgeting ---
+  context: {
+    // Set CONTEXT_INCLUDE_LIVE_CHAT=0 to disable streamer chat context in prompts.
+    includeLiveChatInPrompt: process.env.CONTEXT_INCLUDE_LIVE_CHAT !== "0",
+    // Set to 0 to disable external identity files in developer prompt.
+    includeIdentityContextInDeveloperPrompt: process.env.CONTEXT_INCLUDE_IDENTITY !== "0",
+
+    developerPromptIdentityMaxChars: Number(process.env.CONTEXT_DEVELOPER_IDENTITY_MAX_CHARS || 9000),
+    userInputMaxChars: Number(process.env.CONTEXT_USER_INPUT_MAX_CHARS || 52000),
+    userInputSummaryMaxChars: Number(process.env.CONTEXT_USER_INPUT_SUMMARY_MAX_CHARS || 26000),
+
+    memoryMaxItems: Number(process.env.CONTEXT_MEMORY_MAX_ITEMS || 50),
+    memoryItemValueMaxChars: Number(process.env.CONTEXT_MEMORY_VALUE_MAX_CHARS || 320),
+    markersMaxMaps: Number(process.env.CONTEXT_MARKERS_MAX_MAPS || 8),
+    markersMaxPerMap: Number(process.env.CONTEXT_MARKERS_MAX_PER_MAP || 24),
+    liveChatMaxMessages: Number(process.env.CONTEXT_LIVE_CHAT_MAX_MESSAGES || 6),
+    liveChatMaxMentions: Number(process.env.CONTEXT_LIVE_CHAT_MAX_MENTIONS || 3),
+    liveChatMessageMaxChars: Number(process.env.CONTEXT_LIVE_CHAT_MESSAGE_MAX_CHARS || 220),
+    useCompactDeveloperPromptForSummary: process.env.CONTEXT_COMPACT_DEVELOPER_PROMPT_SUMMARY === "1",
+    useCompactDeveloperPromptForCriticism: process.env.CONTEXT_COMPACT_DEVELOPER_PROMPT_CRITICISM === "1",
+
+    sectionMaxChars: {
+      dialog_text: Number(process.env.CONTEXT_DIALOG_TEXT_MAX_CHARS || 1800),
+      player_stats: Number(process.env.CONTEXT_PLAYER_STATS_MAX_CHARS || 11000),
+      battle_state: Number(process.env.CONTEXT_BATTLE_STATE_MAX_CHARS || 4200),
+      navigation_plan: Number(process.env.CONTEXT_NAV_PLAN_MAX_CHARS || 3200),
+      objectives_section: Number(process.env.CONTEXT_OBJECTIVES_MAX_CHARS || 3200),
+      memory: Number(process.env.CONTEXT_MEMORY_SECTION_MAX_CHARS || 9000),
+      markers: Number(process.env.CONTEXT_MARKERS_SECTION_MAX_CHARS || 4200),
+      visible_area: Number(process.env.CONTEXT_VISIBLE_AREA_MAX_CHARS || 7200),
+      explored_map: Number(process.env.CONTEXT_EXPLORED_MAP_MAX_CHARS || 13000),
+      live_chat: Number(process.env.CONTEXT_LIVE_CHAT_SECTION_MAX_CHARS || 1400),
+    },
+
+    summarySectionMaxChars: {
+      dialog_text: Number(process.env.CONTEXT_SUMMARY_DIALOG_TEXT_MAX_CHARS || 1200),
+      player_stats: Number(process.env.CONTEXT_SUMMARY_PLAYER_STATS_MAX_CHARS || 5600),
+      battle_state: Number(process.env.CONTEXT_SUMMARY_BATTLE_STATE_MAX_CHARS || 2800),
+      navigation_plan: Number(process.env.CONTEXT_SUMMARY_NAV_PLAN_MAX_CHARS || 2200),
+      objectives_section: Number(process.env.CONTEXT_SUMMARY_OBJECTIVES_MAX_CHARS || 2100),
+      memory: Number(process.env.CONTEXT_SUMMARY_MEMORY_SECTION_MAX_CHARS || 3400),
+      markers: Number(process.env.CONTEXT_SUMMARY_MARKERS_SECTION_MAX_CHARS || 2200),
+      visible_area: Number(process.env.CONTEXT_SUMMARY_VISIBLE_AREA_MAX_CHARS || 3600),
+      explored_map: Number(process.env.CONTEXT_SUMMARY_EXPLORED_MAP_MAX_CHARS || 5200),
+      live_chat: Number(process.env.CONTEXT_SUMMARY_LIVE_CHAT_SECTION_MAX_CHARS || 300),
+    },
+
+    toolResultStoreMaxChars: Number(process.env.CONTEXT_TOOL_RESULT_STORE_MAX_CHARS || 3200),
+  },
+
   // --- History Processing Configuration ---
   history: {
     keepLastNToolPartialResults: 20,
-    keepLastNToolFullResults: 2,
+    keepLastNToolFullResults: Number(process.env.HISTORY_KEEP_TOOL_FULL_RESULTS || 2),
     keepLastNUserMessagesWithMinimap: 1,
-    keepLastNUserMessagesWithMemory: 5,
-    keepLastNUserMessagesWithViewMap: 5,
-    keepLastNUserMessagesWithImages: 3,
-    keepLastNUserMessagesWithDetailedData: 4,
+    keepLastNUserMessagesWithMemory: Number(process.env.HISTORY_KEEP_USER_MEMORY || 3),
+    keepLastNUserMessagesWithViewMap: Number(process.env.HISTORY_KEEP_USER_VIEW_MAP || 2),
+    keepLastNUserMessagesWithImages: Number(process.env.HISTORY_KEEP_USER_IMAGES || 2),
+    keepLastNUserMessagesWithDetailedData: Number(process.env.HISTORY_KEEP_USER_DETAILED_DATA || 2),
     keepLastNUserMessagesWithPokedex: 1,
+    userMessageMaxChars: Number(process.env.HISTORY_USER_MESSAGE_MAX_CHARS || 45000),
+    toolResultKeepMaxChars: Number(process.env.HISTORY_TOOL_RESULT_KEEP_MAX_CHARS || 2600),
+    toolResultDropMaxChars: Number(process.env.HISTORY_TOOL_RESULT_DROP_MAX_CHARS || 1200),
+    toolResultDetailsMaxChars: Number(process.env.HISTORY_TOOL_RESULT_DETAILS_MAX_CHARS || 700),
     limitAssistantMessagesForSelfCriticism: 55,
     limitAssistantMessagesForSummary: 30,
   },
